@@ -82,7 +82,7 @@
             </div>
             <div class="glass-card p-6">
                 <h4 class="font-bold mb-4 flex items-center text-gray-700">
-                    <i class="fas fa-history mr-2 text-blue-600"></i> Aktivitas Log (<span id="logDateLabel"></span>)
+                    <i class="fas fa-history mr-2 text-blue-600"></i> Aktivitas Log Hari Ini
                 </h4>
                 <div id="recent-list" class="space-y-3"></div>
             </div>
@@ -91,7 +91,7 @@
         <!-- SCAN QR -->
         <section id="content-scan" class="hidden space-y-4">
             <div class="glass-card p-4 text-center">
-                <h2 class="text-lg font-bold mb-2 text-gray-800">Pindai QR Kode Otomatis</h2>
+                <h2 class="text-lg font-bold mb-2 text-gray-800">Pindai QR Kode</h2>
                 <div class="relative mx-auto max-w-sm overflow-hidden rounded-2xl shadow-2xl border-4 border-white mb-4">
                     <div id="reader" style="width: 100%; min-height: 300px;"></div>
                 </div>
@@ -115,12 +115,12 @@
                 <input type="hidden" id="edit-index" value="-1">
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                     <input type="text" id="inputNama" placeholder="Nama Lengkap" class="p-3 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500">
-                    <input type="text" id="inputKelas" placeholder="Kelas (Contoh: X IPA 1)" class="p-3 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500">
+                    <input type="text" id="inputKelas" placeholder="Kelas" class="p-3 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500">
                     <input type="text" id="inputNIS" placeholder="NIS / ID QR" class="p-3 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500">
                     <input type="tel" id="inputHpOrtu" placeholder="WhatsApp Ortu (Contoh: 628...)" class="p-3 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500">
                 </div>
                 <div class="flex space-x-2">
-                    <button id="btnSaveSiswa" onclick="saveSiswa()" class="flex-1 bg-blue-700 text-white py-3 rounded-xl font-bold hover:bg-blue-800">Simpan Siswa</button>
+                    <button id="btnSaveSiswa" onclick="saveSiswa()" class="flex-1 bg-blue-700 text-white py-3 rounded-xl font-bold hover:bg-blue-800 transition">Simpan Siswa</button>
                     <button id="btnCancelEdit" onclick="resetFormSiswa()" class="hidden bg-gray-400 text-white py-3 px-6 rounded-xl font-bold">Batal</button>
                 </div>
             </div>
@@ -147,30 +147,37 @@
         <!-- REKAPITULASI -->
         <section id="content-rekap" class="hidden space-y-6">
             <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                <h2 class="font-bold text-xl text-gray-800">Laporan Kehadiran</h2>
-                <div class="flex flex-wrap gap-2">
+                <h2 class="font-bold text-xl text-gray-800">Rekapitulasi Kehadiran</h2>
+                <div class="flex space-x-2">
                     <button onclick="exportToExcel()" class="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center hover:bg-green-700 transition">
-                        <i class="fas fa-file-excel mr-2"></i> DOWNLOAD EXCEL
-                    </button>
-                    <button onclick="confirmClearRekap()" class="bg-red-500 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center hover:bg-red-600 transition">
-                        <i class="fas fa-trash-alt mr-2"></i> HAPUS SEMUA REKAP
+                        <i class="fas fa-file-excel mr-2"></i> EXPORT EXCEL
                     </button>
                 </div>
             </div>
-            <div id="rekap-container" class="space-y-4"></div>
+
+            <!-- TAB REKAP KHUSUS -->
+            <div class="flex bg-gray-200 p-1 rounded-xl">
+                <button onclick="switchRekapTab('masuk')" id="btn-rekap-masuk" class="flex-1 py-2 text-xs font-bold rounded-lg bg-white shadow text-blue-800">SISWA MASUK</button>
+                <button onclick="switchRekapTab('pulang')" id="btn-rekap-pulang" class="flex-1 py-2 text-xs font-bold rounded-lg text-gray-600">SISWA PULANG</button>
+                <button onclick="switchRekapTab('tidak-hadir')" id="btn-rekap-tidak-hadir" class="flex-1 py-2 text-xs font-bold rounded-lg text-gray-600">TIDAK HADIR</button>
+            </div>
+
+            <div id="rekap-list-content" class="space-y-4">
+                <!-- Content will be injected here -->
+            </div>
         </section>
 
         <!-- PENGATURAN -->
         <section id="content-settings" class="hidden space-y-6">
             <div class="glass-card p-6">
-                <h2 class="font-bold text-lg mb-4 text-gray-800 border-b pb-2"><i class="fas fa-calendar-alt mr-2 text-blue-600"></i>Waktu & Tanggal</h2>
+                <h2 class="font-bold text-lg mb-4 text-gray-800 border-b pb-2"><i class="fas fa-calendar-alt mr-2 text-blue-600"></i>Konfigurasi Waktu</h2>
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
-                        <label class="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-tight">Tanggal Aktif Sistem</label>
+                        <label class="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-tight">Tanggal Aktif</label>
                         <input type="date" id="setSystemDate" class="w-full p-3 border rounded-xl focus:ring-2 focus:ring-blue-500">
                     </div>
                     <div>
-                        <label class="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-tight">Jam Masuk (Limit)</label>
+                        <label class="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-tight">Batas Jam Masuk</label>
                         <input type="time" id="setJamMasuk" class="w-full p-3 border rounded-xl focus:ring-2 focus:ring-blue-500">
                     </div>
                     <div>
@@ -181,9 +188,7 @@
             </div>
 
             <div class="glass-card p-6">
-                <h2 class="font-bold text-lg mb-4 text-gray-800 border-b pb-2"><i class="fas fa-comment-dots mr-2 text-blue-600"></i>Template Pesan WhatsApp</h2>
-                <p class="text-[10px] text-blue-600 font-bold mb-4 uppercase">Gunakan kode: [nama], [kelas], [waktu], [tanggal], [status]</p>
-                
+                <h2 class="font-bold text-lg mb-4 text-gray-800 border-b pb-2"><i class="fas fa-comment-dots mr-2 text-blue-600"></i>Template WhatsApp</h2>
                 <div class="space-y-4">
                     <div>
                         <label class="block text-xs font-bold text-gray-500 mb-1 uppercase">Pesan Tepat Waktu</label>
@@ -198,11 +203,11 @@
                         <textarea id="msgPulang" rows="2" class="w-full p-3 border rounded-xl text-sm"></textarea>
                     </div>
                     <div>
-                        <label class="block text-xs font-bold text-gray-500 mb-1 uppercase">Pesan Membolos / Tidak Hadir</label>
+                        <label class="block text-xs font-bold text-gray-500 mb-1 uppercase">Pesan Tidak Hadir</label>
                         <textarea id="msgBolos" rows="2" class="w-full p-3 border rounded-xl text-sm"></textarea>
                     </div>
                 </div>
-                <button onclick="saveSettings()" class="w-full bg-blue-900 text-white py-4 rounded-xl font-bold mt-6 shadow-lg hover:bg-black transition">SIMPAN PENGATURAN</button>
+                <button onclick="saveSettings()" class="w-full bg-blue-900 text-white py-4 rounded-xl font-bold mt-6 hover:bg-black transition">SIMPAN PENGATURAN</button>
             </div>
         </section>
 
@@ -214,21 +219,21 @@
             <div id="modal-icon" class="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl"></div>
             <h2 id="modal-title" class="text-xl font-bold mb-2"></h2>
             <p id="modal-desc" class="text-gray-500 mb-6 text-sm"></p>
-            <button onclick="closeModal()" class="w-full bg-blue-700 text-white py-4 rounded-2xl font-bold">OKE</button>
+            <button onclick="closeModal()" class="w-full bg-blue-700 text-white py-4 rounded-2xl font-bold transition">TUTUP</button>
         </div>
     </div>
 
-    <!-- Modal Konfirmasi Hapus -->
+    <!-- Modal Konfirmasi Hapus (Ditempatkan sesuai permintaan di menu rekap tidak hadir) -->
     <div id="modal-confirm" class="fixed inset-0 bg-black/70 z-[100] hidden flex items-center justify-center p-4">
         <div class="bg-white rounded-3xl p-8 max-w-sm w-full text-center">
             <div class="w-16 h-16 rounded-full bg-red-100 text-red-600 flex items-center justify-center mx-auto mb-4 text-3xl">
-                <i class="fas fa-exclamation-triangle"></i>
+                <i class="fas fa-trash-alt"></i>
             </div>
-            <h2 class="text-xl font-bold mb-2 text-gray-800">Hapus Semua Data?</h2>
-            <p class="text-gray-500 mb-6 text-sm">Tindakan ini akan menghapus seluruh riwayat absensi secara permanen. Anda disarankan mengunduh rekap Excel terlebih dahulu.</p>
+            <h2 class="text-xl font-bold mb-2">Hapus Rekapitulasi?</h2>
+            <p class="text-gray-500 mb-6 text-sm">Semua riwayat absensi akan dihapus permanen dari sistem. Pastikan data sudah di-export jika diperlukan.</p>
             <div class="flex space-x-2">
                 <button onclick="closeConfirmModal()" class="flex-1 bg-gray-200 text-gray-700 py-3 rounded-2xl font-bold">BATAL</button>
-                <button onclick="clearAllRekap()" class="flex-1 bg-red-600 text-white py-3 rounded-2xl font-bold">HAPUS</button>
+                <button onclick="clearAllRekap()" class="flex-1 bg-red-600 text-white py-3 rounded-2xl font-bold">YA, HAPUS</button>
             </div>
         </div>
     </div>
@@ -236,19 +241,19 @@
     <!-- Modal QR Code -->
     <div id="modal-qr" class="fixed inset-0 bg-black/80 z-[110] hidden flex items-center justify-center p-4">
         <div class="bg-white rounded-3xl p-6 max-w-xs w-full text-center relative">
-            <button onclick="closeQRModal()" class="absolute top-4 right-4 text-gray-400 hover:text-red-500"><i class="fas fa-times text-xl"></i></button>
+            <button onclick="closeQRModal()" class="absolute top-4 right-4 text-gray-400 hover:text-red-500 transition"><i class="fas fa-times text-xl"></i></button>
             <h3 id="qr-modal-name" class="font-bold text-blue-800 mb-1">Nama Siswa</h3>
             <p id="qr-modal-nis" class="text-xs text-gray-400 mb-6 font-mono">NIS: 000000</p>
             <div id="qrcode-container" class="flex justify-center mb-6 bg-white p-4 rounded-xl shadow-inner border"></div>
             <button onclick="window.print()" class="w-full bg-gray-100 text-gray-700 py-3 rounded-xl font-bold mb-2 flex items-center justify-center">
                 <i class="fas fa-print mr-2"></i> Cetak QR
             </button>
-            <button onclick="closeQRModal()" class="w-full bg-blue-700 text-white py-3 rounded-xl font-bold">Tutup</button>
+            <button onclick="closeQRModal()" class="w-full bg-blue-700 text-white py-3 rounded-xl font-bold transition">Tutup</button>
         </div>
     </div>
 
     <script>
-        // State management dengan sinkronisasi ke LocalStorage
+        // State Initialization
         let state = {
             siswa: JSON.parse(localStorage.getItem('siswa_sman1')) || [],
             absensi: JSON.parse(localStorage.getItem('absensi_sman1')) || [],
@@ -262,6 +267,7 @@
                 msgBolos: "PENTING: [nama] ([kelas]) TIDAK TERDETEKSI melakukan absensi hingga saat ini (tanggal [tanggal]). Mohon konfirmasi."
             },
             currentTab: 'dashboard',
+            currentRekapTab: 'masuk',
             isScannerRunning: false,
             isTransitioning: false,
             lastScanned: null
@@ -269,35 +275,27 @@
 
         const html5QrCode = new Html5Qrcode("reader");
 
-        // Fungsi Jam & Tanggal Aktif
+        // UI Helpers
         function updateClock() {
             const now = new Date();
             document.getElementById('currentTime').innerText = now.toLocaleTimeString('id-ID', { hour12: false });
-            
             const sysDate = new Date(state.settings.systemDate);
             document.getElementById('activeDateDisplay').innerText = sysDate.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-            document.getElementById('logDateLabel').innerText = state.settings.systemDate;
         }
         setInterval(updateClock, 1000);
 
-        // Navigasi Tab
         async function switchTab(tabId) {
             if (state.isTransitioning) return;
-            
-            if (state.currentTab === 'scan' && state.isScannerRunning) {
-                await stopScanner();
-            }
+            if (state.currentTab === 'scan' && state.isScannerRunning) await stopScanner();
 
-            document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
+            document.querySelectorAll('main > section').forEach(s => s.classList.add('hidden'));
             document.querySelectorAll('nav button').forEach(b => b.classList.remove('tab-active', 'text-blue-800'));
             
             document.getElementById('content-' + tabId).classList.remove('hidden');
             document.getElementById('tab-' + tabId).classList.add('tab-active', 'text-blue-800');
             state.currentTab = tabId;
             
-            if (tabId === 'scan') {
-                setTimeout(startScanner, 300);
-            }
+            if (tabId === 'scan') setTimeout(startScanner, 300);
             if (tabId === 'settings') loadSettingsToUI();
             renderAll();
         }
@@ -306,37 +304,18 @@
         async function startScanner() {
             if (state.isScannerRunning || state.isTransitioning) return;
             state.isTransitioning = true;
-            
-            const qrBoxSize = (vW, vH) => {
-                let size = Math.min(vW, vH) * 0.7;
-                return { width: size, height: size };
-            };
-
             try {
-                await html5QrCode.start(
-                    { facingMode: "environment" }, 
-                    { fps: 20, qrbox: qrBoxSize }, 
-                    onScanSuccess
-                );
+                await html5QrCode.start({ facingMode: "environment" }, { fps: 20, qrbox: 250 }, onScanSuccess);
                 state.isScannerRunning = true;
-            } catch (err) {
-                console.error("Gagal menjalankan scanner:", err);
-            } finally {
-                state.isTransitioning = false;
-            }
+            } catch (err) { console.error(err); } 
+            finally { state.isTransitioning = false; }
         }
 
-        async function stopScanner() { 
+        async function stopScanner() {
             if (!state.isScannerRunning || state.isTransitioning) return;
             state.isTransitioning = true;
-            try { 
-                await html5QrCode.stop(); 
-                state.isScannerRunning = false; 
-            } catch (e) {
-                console.warn("Gagal menghentikan scanner:", e);
-            } finally {
-                state.isTransitioning = false;
-            }
+            try { await html5QrCode.stop(); state.isScannerRunning = false; } catch (e) { } 
+            finally { state.isTransitioning = false; }
         }
 
         function onScanSuccess(decodedText) {
@@ -346,7 +325,7 @@
             if (!targetSiswa) {
                 state.lastScanned = decodedText;
                 setTimeout(() => state.lastScanned = null, 3000);
-                return showMessage("Gagal", "ID Siswa tidak terdaftar!", "error");
+                return showMessage("Gagal", "ID Siswa tidak ditemukan!", "error");
             }
 
             state.lastScanned = decodedText;
@@ -357,7 +336,7 @@
             const type = timeStr >= state.settings.jamPulang ? 'PULANG' : 'MASUK';
             
             const exists = state.absensi.find(a => a.nis === decodedText && a.tanggal === state.settings.systemDate && a.tipe === type);
-            if (exists) return showMessage("Sudah Absen", `${targetSiswa.nama} sudah absen ${type.toLowerCase()} hari ini.`, "info");
+            if (exists) return showMessage("Peringatan", `${targetSiswa.nama} sudah absen ${type.toLowerCase()}.`, "info");
 
             let status = type === 'MASUK' ? (timeStr > state.settings.jamMasuk ? 'Terlambat' : 'Tepat Waktu') : 'Pulang';
 
@@ -370,12 +349,11 @@
             document.getElementById('scan-feedback').classList.remove('hidden');
             setTimeout(() => document.getElementById('scan-feedback').classList.add('hidden'), 2000);
             
-            const utter = new SpeechSynthesisUtterance("Absen " + type.toLowerCase() + " " + targetSiswa.nama + " sukses");
-            utter.lang = 'id-ID';
-            window.speechSynthesis.speak(utter);
+            const utter = new SpeechSynthesisUtterance(`Absen ${type.toLowerCase()} ${targetSiswa.nama} berhasil.`);
+            utter.lang = 'id-ID'; window.speechSynthesis.speak(utter);
         }
 
-        // Siswa Management
+        // Siswa CRUD
         function saveSiswa() {
             const nama = document.getElementById('inputNama').value.trim();
             const kelas = document.getElementById('inputKelas').value.trim();
@@ -383,18 +361,16 @@
             const hp = document.getElementById('inputHpOrtu').value.trim();
             const editIndex = parseInt(document.getElementById('edit-index').value);
 
-            if (!nama || !nis || !kelas) return showMessage("Input Salah", "Nama, Kelas, dan NIS wajib diisi.", "error");
+            if (!nama || !nis || !kelas) return showMessage("Error", "Lengkapi semua data utama.", "error");
 
             if (editIndex === -1) {
                 state.siswa.push({ nama, kelas, nis, hp });
-                showMessage("Berhasil", "Data siswa ditambahkan.", "success");
+                showMessage("Sukses", "Data siswa ditambahkan.", "success");
             } else {
                 state.siswa[editIndex] = { nama, kelas, nis, hp };
-                showMessage("Berhasil", "Data siswa diperbarui.", "success");
+                showMessage("Sukses", "Data siswa diperbarui.", "success");
             }
-
-            saveState();
-            resetFormSiswa();
+            saveState(); resetFormSiswa();
         }
 
         function resetFormSiswa() {
@@ -412,38 +388,29 @@
             document.getElementById('inputNIS').value = s.nis;
             document.getElementById('inputHpOrtu').value = s.hp;
             document.getElementById('edit-index').value = index;
-            
             document.getElementById('form-siswa-title').innerText = "Ubah Data Siswa";
-            document.getElementById('btnSaveSiswa').innerText = "Perbarui Data Siswa";
+            document.getElementById('btnSaveSiswa').innerText = "Perbarui Data";
             document.getElementById('btnCancelEdit').classList.remove('hidden');
-            
             window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function hapusSiswa(i) {
+            if(confirm("Hapus siswa ini?")) { state.siswa.splice(i, 1); saveState(); }
         }
 
         function showQRModal(index) {
             const s = state.siswa[index];
             document.getElementById('qr-modal-name').innerText = s.nama;
             document.getElementById('qr-modal-nis').innerText = "NIS: " + s.nis;
-            
             const container = document.getElementById('qrcode-container');
             container.innerHTML = "";
-            new QRCode(container, {
-                text: s.nis,
-                width: 180,
-                height: 180,
-                colorDark : "#1e40af",
-                colorLight : "#ffffff",
-                correctLevel : QRCode.CorrectLevel.H
-            });
-            
+            new QRCode(container, { text: s.nis, width: 180, height: 180, colorDark : "#1e40af" });
             document.getElementById('modal-qr').classList.remove('hidden');
         }
 
-        function closeQRModal() {
-            document.getElementById('modal-qr').classList.add('hidden');
-        }
+        function closeQRModal() { document.getElementById('modal-qr').classList.add('hidden'); }
 
-        // Settings Management
+        // Settings
         function loadSettingsToUI() {
             document.getElementById('setSystemDate').value = state.settings.systemDate;
             document.getElementById('setJamMasuk').value = state.settings.jamMasuk;
@@ -462,13 +429,24 @@
             state.settings.msgTelat = document.getElementById('msgTelat').value;
             state.settings.msgPulang = document.getElementById('msgPulang').value;
             state.settings.msgBolos = document.getElementById('msgBolos').value;
-            saveState();
-            showMessage("Berhasil", "Pengaturan telah disimpan.", "success");
+            saveState(); showMessage("Sukses", "Pengaturan disimpan.", "success");
         }
 
-        // Rekap Actions
+        // Rekap Tab Navigation
+        function switchRekapTab(tabId) {
+            state.currentRekapTab = tabId;
+            document.querySelectorAll('#btn-rekap-masuk, #btn-rekap-pulang, #btn-rekap-tidak-hadir').forEach(b => {
+                b.classList.remove('bg-white', 'shadow', 'text-blue-800');
+                b.classList.add('text-gray-600');
+            });
+            const activeBtn = document.getElementById('btn-rekap-' + tabId);
+            activeBtn.classList.remove('text-gray-600');
+            activeBtn.classList.add('bg-white', 'shadow', 'text-blue-800');
+            renderRekapList();
+        }
+
+        // Rekap Management
         function confirmClearRekap() {
-            if (state.absensi.length === 0) return showMessage("Info", "Tidak ada data rekap yang bisa dihapus.", "info");
             document.getElementById('modal-confirm').classList.remove('hidden');
         }
 
@@ -480,10 +458,11 @@
             state.absensi = [];
             saveState();
             closeConfirmModal();
-            showMessage("Berhasil", "Seluruh data rekap telah dibersihkan.", "success");
+            showMessage("Berhasil", "Data rekapitulasi telah dihapus.", "success");
+            renderRekapList();
         }
 
-        // Persistence & Rendering
+        // Rendering Core
         function saveState() {
             localStorage.setItem('siswa_sman1', JSON.stringify(state.siswa));
             localStorage.setItem('absensi_sman1', JSON.stringify(state.absensi));
@@ -492,12 +471,12 @@
         }
 
         function renderAll() {
-            const logs = state.absensi.filter(a => a.tanggal === state.settings.systemDate);
-            document.getElementById('stat-tepat').innerText = logs.filter(a => a.status === 'Tepat Waktu').length;
-            document.getElementById('stat-telat').innerText = logs.filter(a => a.status === 'Terlambat').length;
+            const logsToday = state.absensi.filter(a => a.tanggal === state.settings.systemDate);
+            document.getElementById('stat-tepat').innerText = logsToday.filter(a => a.status === 'Tepat Waktu').length;
+            document.getElementById('stat-telat').innerText = logsToday.filter(a => a.status === 'Terlambat').length;
 
             const recentList = document.getElementById('recent-list');
-            recentList.innerHTML = logs.slice(0, 5).map(a => `
+            recentList.innerHTML = logsToday.slice(0, 5).map(a => `
                 <div class="p-3 bg-white border-b flex justify-between items-center rounded-lg shadow-sm">
                     <div>
                         <p class="font-bold text-sm text-gray-800">${a.nama}</p>
@@ -505,7 +484,7 @@
                     </div>
                     <i class="fas fa-check-circle text-green-500"></i>
                 </div>
-            `).join('') || '<p class="text-center text-gray-400 py-4 text-xs italic">Belum ada data pada tanggal ini</p>';
+            `).join('') || '<p class="text-center text-gray-400 py-4 text-xs italic">Log kosong hari ini</p>';
 
             const siswaTable = document.getElementById('siswa-table-body');
             siswaTable.innerHTML = state.siswa.map((s, i) => `
@@ -517,69 +496,73 @@
                     <td class="p-4 text-xs font-mono text-gray-500">${s.nis}</td>
                     <td class="p-4">
                         <div class="flex items-center justify-center space-x-2">
-                            <button onclick="showQRModal(${i})" title="Lihat QR Code" class="p-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 transition"><i class="fas fa-qrcode"></i></button>
-                            <button onclick="editSiswa(${i})" title="Edit Data" class="p-2 bg-yellow-100 text-yellow-600 rounded-lg hover:bg-yellow-200 transition"><i class="fas fa-edit"></i></button>
-                            <button onclick="hapusSiswa(${i})" title="Hapus" class="p-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition"><i class="fas fa-trash"></i></button>
+                            <button onclick="showQRModal(${i})" class="p-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 transition"><i class="fas fa-qrcode"></i></button>
+                            <button onclick="editSiswa(${i})" class="p-2 bg-yellow-100 text-yellow-600 rounded-lg hover:bg-yellow-200 transition"><i class="fas fa-edit"></i></button>
+                            <button onclick="hapusSiswa(${i})" class="p-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition"><i class="fas fa-trash"></i></button>
                         </div>
                     </td>
                 </tr>
-            `).join('') || '<tr><td colspan="3" class="p-8 text-center text-gray-400 italic text-sm">Belum ada data siswa. Silakan tambah atau impor.</td></tr>';
+            `).join('') || '<tr><td colspan="3" class="p-8 text-center text-gray-400 text-xs italic">Belum ada data siswa.</td></tr>';
 
-            renderRekap(logs);
+            renderRekapList();
         }
 
-        function renderRekap(logs) {
-            const container = document.getElementById('rekap-container');
-            const sections = ['MASUK', 'PULANG', 'TIDAK HADIR'];
+        function renderRekapList() {
+            const listContainer = document.getElementById('rekap-list-content');
+            const logsToday = state.absensi.filter(a => a.tanggal === state.settings.systemDate);
             
-            const hasAbsenNis = new Set(logs.filter(l => l.tipe === 'MASUK').map(l => l.nis));
-            const bolos = state.siswa.filter(s => !hasAbsenNis.has(s.nis));
+            let html = "";
+            let color = "blue";
+            let displayData = [];
 
-            container.innerHTML = sections.map(sec => {
-                let data = [];
-                let color = "";
-                if (sec === 'MASUK') { data = logs.filter(l => l.tipe === 'MASUK'); color = "border-blue-500"; }
-                else if (sec === 'PULANG') { data = logs.filter(l => l.tipe === 'PULANG'); color = "border-orange-500"; }
-                else { data = bolos; color = "border-red-600"; }
-
-                return `
-                    <div class="glass-card overflow-hidden border-t-4 ${color}">
-                        <div class="p-3 bg-gray-50 flex justify-between items-center">
-                            <h3 class="font-bold text-xs uppercase text-gray-600">${sec}</h3>
-                            <span class="text-[10px] font-bold bg-white px-2 py-1 rounded-full shadow-sm text-gray-500">${data.length} Orang</span>
-                        </div>
-                        <div class="p-4 space-y-3">
-                            ${data.map(item => `
-                                <div class="flex justify-between items-center text-sm border-b border-gray-50 pb-2 last:border-0">
-                                    <div>
-                                        <div class="font-bold text-gray-800">${item.nama}</div>
-                                        <div class="text-[10px] text-gray-400 font-bold uppercase">
-                                            ${sec === 'TIDAK HADIR' ? 'TIDAK ADA KETERANGAN' : `${item.status} • ${item.waktu}`}
-                                        </div>
-                                    </div>
-                                    <button onclick="sendWA('${item.nis}', '${sec}')" class="bg-green-500 text-white px-3 py-1 rounded-full text-[10px] font-bold shadow-sm hover:bg-green-600 active:scale-95 transition">
-                                        <i class="fab fa-whatsapp"></i> WA
-                                    </button>
-                                </div>
-                            `).join('') || '<p class="text-xs text-gray-400 italic py-2">Tidak ada data</p>'}
-                        </div>
-                    </div>
+            if (state.currentRekapTab === 'masuk') {
+                displayData = logsToday.filter(a => a.tipe === 'MASUK');
+                color = "blue";
+            } else if (state.currentRekapTab === 'pulang') {
+                displayData = logsToday.filter(a => a.tipe === 'PULANG');
+                color = "orange";
+            } else {
+                const hasAbsenNis = new Set(logsToday.filter(l => l.tipe === 'MASUK').map(l => l.nis));
+                displayData = state.siswa.filter(s => !hasAbsenNis.has(s.nis));
+                color = "red";
+                
+                // Tambahkan tombol hapus khusus di menu Tidak Hadir
+                html += `
+                    <button onclick="confirmClearRekap()" class="w-full mb-4 bg-red-100 text-red-700 py-3 rounded-xl text-xs font-bold border border-red-200 hover:bg-red-200 transition">
+                        <i class="fas fa-trash-alt mr-2"></i> HAPUS SELURUH REKAPITULASI
+                    </button>
                 `;
-            }).join('');
+            }
+
+            html += displayData.map(item => `
+                <div class="glass-card flex justify-between items-center p-4 border-l-4 border-${color}-500">
+                    <div>
+                        <p class="font-bold text-sm text-gray-800">${item.nama}</p>
+                        <p class="text-[10px] text-gray-400 uppercase font-bold">
+                            ${state.currentRekapTab === 'tidak-hadir' ? item.kelas : `${item.status} • ${item.waktu}`}
+                        </p>
+                    </div>
+                    <button onclick="sendWA('${item.nis}', '${state.currentRekapTab.toUpperCase()}')" class="bg-green-500 text-white p-2 rounded-full text-xs font-bold hover:bg-green-600 transition">
+                        <i class="fab fa-whatsapp text-lg"></i>
+                    </button>
+                </div>
+            `).join('') || `<p class="text-center text-gray-400 py-10 text-xs italic">Tidak ada data ${state.currentRekapTab.replace('-', ' ')}</p>`;
+
+            listContainer.innerHTML = html;
         }
 
-        // WhatsApp Integration
+        // WhatsApp
         function sendWA(nis, tipe) {
             const siswa = state.siswa.find(s => s.nis === nis);
-            if (!siswa || !siswa.hp) return showMessage("Gagal", "Nomor WhatsApp Ortu tidak ditemukan.", "error");
+            if (!siswa || !siswa.hp) return showMessage("Error", "Nomor WA Ortu tidak ada.", "error");
 
             let template = "";
             let log = null;
 
-            if (tipe === 'TIDAK HADIR') {
+            if (tipe === 'TIDAK-HADIR') {
                 template = state.settings.msgBolos;
             } else {
-                log = state.absensi.find(a => a.nis === nis && a.tanggal === state.settings.systemDate && a.tipe === tipe);
+                log = state.absensi.find(a => a.nis === nis && a.tanggal === state.settings.systemDate && a.tipe === (tipe === 'MASUK' ? 'MASUK' : 'PULANG'));
                 if (!log) return;
                 if (tipe === 'MASUK') template = log.status === 'Terlambat' ? state.settings.msgTelat : state.settings.msgTepat;
                 else template = state.settings.msgPulang;
@@ -595,13 +578,13 @@
             window.open(`https://api.whatsapp.com/send?phone=${siswa.hp}&text=${encodeURIComponent(pesan)}`, '_blank');
         }
 
-        // Excel Export/Import
+        // Excel
         function exportToExcel() {
-            if (state.absensi.length === 0) return showMessage("Info", "Data absensi masih kosong.", "info");
+            if (state.absensi.length === 0) return showMessage("Info", "Data masih kosong.", "info");
             const ws = XLSX.utils.json_to_sheet(state.absensi);
             const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "Rekap");
-            XLSX.writeFile(wb, `Rekap_Absensi_SMAN1MOTUI_${state.settings.systemDate}.xlsx`);
+            XLSX.utils.book_append_sheet(wb, ws, "Rekap_Absensi");
+            XLSX.writeFile(wb, `SMAN1_Rekap_${state.settings.systemDate}.xlsx`);
         }
 
         function importFromExcel(event) {
@@ -620,29 +603,20 @@
                     };
                     if (s.nama && s.nis) state.siswa.push(s);
                 });
-                saveState();
-                showMessage("Berhasil", "Data siswa telah diimpor.", "success");
+                saveState(); showMessage("Sukses", "Data diimpor.", "success");
             };
             reader.readAsBinaryString(file);
         }
 
         function downloadSampleExcel() {
-            const sample = [{ Nama: "Ahmad Fauzi", Kelas: "X IPA 1", NIS: "2024001", HP: "628123456789" }];
+            const sample = [{ Nama: "Siswa Contoh", Kelas: "X IPA 1", NIS: "123456", HP: "628xxx" }];
             const ws = XLSX.utils.json_to_sheet(sample);
             const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "Sample");
-            XLSX.writeFile(wb, "Contoh_Data_Siswa.xlsx");
+            XLSX.utils.book_append_sheet(wb, ws, "Contoh");
+            XLSX.writeFile(wb, "Format_Impor_Siswa.xlsx");
         }
 
-        function hapusSiswa(i) { 
-            if(confirm("Hapus data siswa ini? Semua log absensi tidak akan terhapus tapi data identitas hilang.")) { 
-                state.siswa.splice(i, 1); 
-                saveState(); 
-            } 
-        }
-        
         function closeModal() { document.getElementById('modal-notif').classList.add('hidden'); }
-
         function showMessage(t, d, type) {
             const icon = document.getElementById('modal-icon');
             icon.className = `w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl ${type === 'success' ? 'bg-green-100 text-green-600' : (type === 'error' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600')}`;
