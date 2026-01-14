@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Absensi Online SMAN 1 MOTUI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
+        .glass-card { background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(10px); border-radius: 1rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
+        .tab-active { border-bottom: 3px solid #1e40af; color: #1e40af; font-weight: 600; }
+        #reader { border-radius: 1rem; overflow: hidden; border: none !important; background: #000; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        @media print {
+            body * { visibility: hidden; }
+            #modal-qr, #modal-qr * { visibility: visible; }
+            #modal-qr { position: absolute; left: 0; top: 0; width: 100%; }
+            button { display: none !important; }
+        }
+    </style>
+</head>
+<body class="min-h-screen">
+
+    <header class="bg-blue-800 text-white p-6 shadow-lg">
+        <div class="max-w-4xl mx-auto flex items-center justify-between">
+            <div class="flex items-center space-x-4">
+                <div class="bg-white p-2 rounded-full shadow-inner">
+                    <i class="fas fa-school text-blue-800 text-2xl"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold">SMAN 1 MOTUI</h1>
+                    <p class="text-xs opacity-80 uppercase tracking-wider">Sistem Absensi Terintegrasi</p>
+                </div>
+            </div>
+            <div class="text-right">
+                <div id="activeDateDisplay" class="text-sm font-semibold opacity-90 italic"></div>
+                <div id="currentTime" class="text-2xl font-bold tracking-widest"></div>
+            </div>
+        </div>
+    </header>
+
+    <nav class="bg-white shadow-sm sticky top-0 z-50">
+        <div class="max-w-4xl mx-auto flex overflow-x-auto no-scrollbar">
+            <button onclick="switchTab('dashboard')" id="tab-dashboard" class="flex-1 py-4 px-2 text-center text-sm tab-active min-w-[80px]">
+                <i class="fas fa-home block mb-1"></i> Beranda
+            </button>
+            <button onclick="switchTab('scan')" id="tab-scan" class="flex-1 py-4 px-2 text-center text-sm text-gray-500 min-w-[80px]">
+                <i class="fas fa-qrcode block mb-1"></i> Scan QR
+            </button>
+            <button onclick="switchTab('siswa')" id="tab-siswa" class="flex-1 py-4 px-2 text-center text-sm text-gray-500 min-w-[80px]">
+                <i class="fas fa-users block mb-1"></i> Siswa
+            </button>
+            <button onclick="switchTab('rekap')" id="tab-rekap" class="flex-1 py-4 px-2 text-center text-sm text-gray-500 min-w-[80px]">
+                <i class="fas fa-file-alt block mb-1"></i> Rekap
+            </button>
+            <button onclick="switchTab('settings')" id="tab-settings" class="flex-1 py-4 px-2 text-center text-sm text-gray-500 min-w-[80px]">
+                <i class="fas fa-cog block mb-1"></i> Atur
+            </button>
+        </div>
+    </nav>
+
+    <main class="max-w-4xl mx-auto p-4 mb-20">
+
+        <!-- DASHBOARD -->
+        <section id="content-dashboard" class="space-y-4">
+            <div class="grid grid-cols-2 gap-4">
+                <div class="glass-card p-6 border-l-4 border-green-500">
+                    <p class="text-gray-500 text-sm font-medium">Hadir Tepat Waktu</p>
+                    <h3 id="stat-tepat" class="text-3xl font-bold text-green-600">0</h3>
+                </div>
+                <div class="glass-card p-6 border-l-4 border-red-500">
+                    <p class="text-gray-500 text-sm font-medium">Terlambat</p>
+                    <h3 id="stat-telat" class="text-3xl font-bold text-red-600">0</h3>
+                </div>
+            </div>
+            <div class="glass-card p-6">
+                <h4 class="font-bold mb-4 flex items-center text-gray-700">
+                    <i class="fas fa-history mr-2 text-blue-600"></i> Aktivitas Log (<span id="logDateLabel"></span>)
+                </h4>
+                <div id="recent-list" class="space-y-3"></div>
+            </div>
+        </section>
+
+        <!-- SCAN QR -->
+        <section id="content-scan" class="hidden space-y-4">
+            <div class="glass-card p-4 text-center">
+                <h2 class="text-lg font-bold mb-2 text-gray-800">Pindai QR Kode Otomatis</h2>
+                <div class="relative mx-auto max-w-sm overflow-hidden rounded-2xl shadow-2xl border-4 border-white mb-4">
+                    <div id="reader" style="width: 100%; min-height: 300px;"></div>
+                </div>
+                <div id="scan-feedback" class="mt-4 hidden p-3 rounded-xl bg-green-500 text-white font-bold animate-pulse">BERHASIL!</div>
+            </div>
+        </section>
+
+        <!-- DATA SISWA -->
+        <section id="content-siswa" class="hidden space-y-4">
+            <div class="glass-card p-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 id="form-siswa-title" class="font-bold text-lg text-blue-800">Tambah Data Siswa</h2>
+                    <div class="flex space-x-2">
+                        <button onclick="downloadSampleExcel()" class="bg-gray-100 text-gray-700 px-3 py-2 rounded-lg text-xs font-bold">CONTOH</button>
+                        <label class="bg-blue-600 text-white px-3 py-2 rounded-lg text-xs font-bold cursor-pointer hover:bg-blue-700">
+                            IMPOR
+                            <input type="file" class="hidden" accept=".xlsx, .xls" onchange="importFromExcel(event)">
+                        </label>
+                    </div>
+                </div>
+                <input type="hidden" id="edit-index" value="-1">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <input type="text" id="inputNama" placeholder="Nama Lengkap" class="p-3 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500">
+                    <input type="text" id="inputKelas" placeholder="Kelas (Contoh: X IPA 1)" class="p-3 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500">
+                    <input type="text" id="inputNIS" placeholder="NIS / ID QR" class="p-3 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500">
+                    <input type="tel" id="inputHpOrtu" placeholder="WhatsApp Ortu (Contoh: 628...)" class="p-3 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div class="flex space-x-2">
+                    <button id="btnSaveSiswa" onclick="saveSiswa()" class="flex-1 bg-blue-700 text-white py-3 rounded-xl font-bold hover:bg-blue-800">Simpan Siswa</button>
+                    <button id="btnCancelEdit" onclick="resetFormSiswa()" class="hidden bg-gray-400 text-white py-3 px-6 rounded-xl font-bold">Batal</button>
+                </div>
+            </div>
+            
+            <div class="glass-card overflow-hidden">
+                <div class="p-4 bg-blue-50 border-b">
+                    <h3 class="font-bold text-sm text-blue-800">Daftar Seluruh Siswa</h3>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="p-4 text-xs font-bold uppercase text-gray-500">Siswa / Kelas</th>
+                                <th class="p-4 text-xs font-bold uppercase text-gray-500">NIS/ID</th>
+                                <th class="p-4 text-xs font-bold uppercase text-gray-500 text-center">Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody id="siswa-table-body" class="divide-y divide-gray-100"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- REKAPITULASI -->
+        <section id="content-rekap" class="hidden space-y-6">
+            <div class="flex justify-between items-center">
+                <h2 class="font-bold text-xl text-gray-800">Laporan Kehadiran</h2>
+                <button onclick="exportToExcel()" class="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center">
+                    <i class="fas fa-file-excel mr-2"></i> DOWNLOAD EXCEL
+                </button>
+            </div>
+            <div id="rekap-container" class="space-y-4"></div>
+        </section>
+
+        <!-- PENGATURAN -->
+        <section id="content-settings" class="hidden space-y-6">
+            <div class="glass-card p-6">
+                <h2 class="font-bold text-lg mb-4 text-gray-800 border-b pb-2"><i class="fas fa-calendar-alt mr-2 text-blue-600"></i>Waktu & Tanggal</h2>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-tight">Tanggal Aktif Sistem</label>
+                        <input type="date" id="setSystemDate" class="w-full p-3 border rounded-xl focus:ring-2 focus:ring-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-tight">Jam Masuk (Limit)</label>
+                        <input type="time" id="setJamMasuk" class="w-full p-3 border rounded-xl focus:ring-2 focus:ring-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-tight">Jam Pulang</label>
+                        <input type="time" id="setJamPulang" class="w-full p-3 border rounded-xl focus:ring-2 focus:ring-blue-500">
+                    </div>
+                </div>
+            </div>
+
+            <div class="glass-card p-6">
+                <h2 class="font-bold text-lg mb-4 text-gray-800 border-b pb-2"><i class="fas fa-comment-dots mr-2 text-blue-600"></i>Template Pesan WhatsApp</h2>
+                <p class="text-[10px] text-blue-600 font-bold mb-4 uppercase">Gunakan kode: [nama], [kelas], [waktu], [tanggal], [status]</p>
+                
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-bold text-gray-500 mb-1 uppercase">Pesan Tepat Waktu</label>
+                        <textarea id="msgTepat" rows="2" class="w-full p-3 border rounded-xl text-sm"></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-500 mb-1 uppercase">Pesan Terlambat</label>
+                        <textarea id="msgTelat" rows="2" class="w-full p-3 border rounded-xl text-sm"></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-500 mb-1 uppercase">Pesan Pulang</label>
+                        <textarea id="msgPulang" rows="2" class="w-full p-3 border rounded-xl text-sm"></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-500 mb-1 uppercase">Pesan Membolos / Tidak Hadir</label>
+                        <textarea id="msgBolos" rows="2" class="w-full p-3 border rounded-xl text-sm"></textarea>
+                    </div>
+                </div>
+                <button onclick="saveSettings()" class="w-full bg-blue-900 text-white py-4 rounded-xl font-bold mt-6 shadow-lg hover:bg-black transition">SIMPAN PENGATURAN</button>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Modals -->
+    <div id="modal-notif" class="fixed inset-0 bg-black/70 z-[100] hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl p-8 max-w-sm w-full text-center">
+            <div id="modal-icon" class="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl"></div>
+            <h2 id="modal-title" class="text-xl font-bold mb-2"></h2>
+            <p id="modal-desc" class="text-gray-500 mb-6 text-sm"></p>
+            <button onclick="closeModal()" class="w-full bg-blue-700 text-white py-4 rounded-2xl font-bold">OKE</button>
+        </div>
+    </div>
+
+    <!-- Modal QR Code -->
+    <div id="modal-qr" class="fixed inset-0 bg-black/80 z-[110] hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl p-6 max-w-xs w-full text-center relative">
+            <button onclick="closeQRModal()" class="absolute top-4 right-4 text-gray-400 hover:text-red-500"><i class="fas fa-times text-xl"></i></button>
+            <h3 id="qr-modal-name" class="font-bold text-blue-800 mb-1">Nama Siswa</h3>
+            <p id="qr-modal-nis" class="text-xs text-gray-400 mb-6 font-mono">NIS: 000000</p>
+            <div id="qrcode-container" class="flex justify-center mb-6 bg-white p-4 rounded-xl shadow-inner border"></div>
+            <button onclick="window.print()" class="w-full bg-gray-100 text-gray-700 py-3 rounded-xl font-bold mb-2 flex items-center justify-center">
+                <i class="fas fa-print mr-2"></i> Cetak QR
+            </button>
+            <button onclick="closeQRModal()" class="w-full bg-blue-700 text-white py-3 rounded-xl font-bold">Tutup</button>
+        </div>
+    </div>
+
+    <script>
+        // State management dengan sinkronisasi ke LocalStorage
+        let state = {
+            siswa: JSON.parse(localStorage.getItem('siswa_sman1')) || [],
+            absensi: JSON.parse(localStorage.getItem('absensi_sman1')) || [],
+            settings: JSON.parse(localStorage.getItem('settings_sman1')) || { 
+                jamMasuk: "07:30",
+                jamPulang: "14:00",
+                systemDate: new Date().toISOString().split('T')[0],
+                msgTepat: "Pemberitahuan: [nama] ([kelas]) telah hadir TEPAT WAKTU pada pukul [waktu] tanggal [tanggal].",
+                msgTelat: "Peringatan: [nama] ([kelas]) hadir TERLAMBAT pada pukul [waktu] tanggal [tanggal]. Mohon diingatkan.",
+                msgPulang: "Info: [nama] ([kelas]) telah melakukan absen PULANG pada pukul [waktu]. Terima kasih.",
+                msgBolos: "PENTING: [nama] ([kelas]) TIDAK TERDETEKSI melakukan absensi hingga saat ini (tanggal [tanggal]). Mohon konfirmasi."
+            },
+            currentTab: 'dashboard',
+            isScannerRunning: false,
+            lastScanned: null
+        };
+
+        const html5QrCode = new Html5Qrcode("reader");
+
+        // Fungsi Jam & Tanggal Aktif
+        function updateClock() {
+            const now = new Date();
+            document.getElementById('currentTime').innerText = now.toLocaleTimeString('id-ID', { hour12: false });
+            
+            const sysDate = new Date(state.settings.systemDate);
+            document.getElementById('activeDateDisplay').innerText = sysDate.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+            document.getElementById('logDateLabel').innerText = state.settings.systemDate;
+        }
+        setInterval(updateClock, 1000);
+
+        // Navigasi Tab
+        async function switchTab(tabId) {
+            if (state.currentTab === 'scan' && state.isScannerRunning) await stopScanner();
+            document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
+            document.querySelectorAll('nav button').forEach(b => b.classList.remove('tab-active', 'text-blue-800'));
+            
+            document.getElementById('content-' + tabId).classList.remove('hidden');
+            document.getElementById('tab-' + tabId).classList.add('tab-active', 'text-blue-800');
+            state.currentTab = tabId;
+            
+            if (tabId === 'scan') setTimeout(startScanner, 200);
+            if (tabId === 'settings') loadSettingsToUI();
+            renderAll();
+        }
+
+        // Scanner Logic
+        function startScanner() {
+            const qrBoxSize = (vW, vH) => {
+                let size = Math.min(vW, vH) * 0.7;
+                return { width: size, height: size };
+            };
+            html5QrCode.start({ facingMode: "environment" }, { fps: 20, qrbox: qrBoxSize }, onScanSuccess)
+                .then(() => state.isScannerRunning = true);
+        }
+
+        async function stopScanner() { 
+            try { await html5QrCode.stop(); state.isScannerRunning = false; } catch (e) {} 
+        }
+
+        function onScanSuccess(decodedText) {
+            if (state.lastScanned === decodedText) return;
+            const targetSiswa = state.siswa.find(s => s.nis === decodedText);
+            
+            if (!targetSiswa) {
+                state.lastScanned = decodedText;
+                setTimeout(() => state.lastScanned = null, 3000);
+                return showMessage("Gagal", "ID Siswa tidak terdaftar!", "error");
+            }
+
+            state.lastScanned = decodedText;
+            setTimeout(() => state.lastScanned = null, 5000);
+
+            const now = new Date();
+            const timeStr = now.getHours().toString().padStart(2, '0') + ":" + now.getMinutes().toString().padStart(2, '0');
+            const type = timeStr >= state.settings.jamPulang ? 'PULANG' : 'MASUK';
+            
+            const exists = state.absensi.find(a => a.nis === decodedText && a.tanggal === state.settings.systemDate && a.tipe === type);
+            if (exists) return showMessage("Sudah Absen", `${targetSiswa.nama} sudah absen ${type.toLowerCase()} hari ini.`, "info");
+
+            let status = type === 'MASUK' ? (timeStr > state.settings.jamMasuk ? 'Terlambat' : 'Tepat Waktu') : 'Pulang';
+
+            state.absensi.unshift({
+                nama: targetSiswa.nama, kelas: targetSiswa.kelas, nis: targetSiswa.nis, hp: targetSiswa.hp,
+                waktu: timeStr, tanggal: state.settings.systemDate, status: status, tipe: type
+            });
+
+            saveState();
+            document.getElementById('scan-feedback').classList.remove('hidden');
+            setTimeout(() => document.getElementById('scan-feedback').classList.add('hidden'), 2000);
+            
+            const utter = new SpeechSynthesisUtterance("Absen " + type.toLowerCase() + " " + targetSiswa.nama + " sukses");
+            utter.lang = 'id-ID';
+            window.speechSynthesis.speak(utter);
+        }
+
+        // Siswa Management
+        function saveSiswa() {
+            const nama = document.getElementById('inputNama').value.trim();
+            const kelas = document.getElementById('inputKelas').value.trim();
+            const nis = document.getElementById('inputNIS').value.trim();
+            const hp = document.getElementById('inputHpOrtu').value.trim();
+            const editIndex = parseInt(document.getElementById('edit-index').value);
+
+            if (!nama || !nis || !kelas) return showMessage("Input Salah", "Nama, Kelas, dan NIS wajib diisi.", "error");
+
+            if (editIndex === -1) {
+                state.siswa.push({ nama, kelas, nis, hp });
+                showMessage("Berhasil", "Data siswa ditambahkan.", "success");
+            } else {
+                state.siswa[editIndex] = { nama, kelas, nis, hp };
+                showMessage("Berhasil", "Data siswa diperbarui.", "success");
+            }
+
+            saveState();
+            resetFormSiswa();
+        }
+
+        function resetFormSiswa() {
+            ["inputNama", "inputKelas", "inputNIS", "inputHpOrtu"].forEach(id => document.getElementById(id).value = "");
+            document.getElementById('edit-index').value = "-1";
+            document.getElementById('form-siswa-title').innerText = "Tambah Data Siswa";
+            document.getElementById('btnSaveSiswa').innerText = "Simpan Siswa";
+            document.getElementById('btnCancelEdit').classList.add('hidden');
+        }
+
+        function editSiswa(index) {
+            const s = state.siswa[index];
+            document.getElementById('inputNama').value = s.nama;
+            document.getElementById('inputKelas').value = s.kelas;
+            document.getElementById('inputNIS').value = s.nis;
+            document.getElementById('inputHpOrtu').value = s.hp;
+            document.getElementById('edit-index').value = index;
+            
+            document.getElementById('form-siswa-title').innerText = "Ubah Data Siswa";
+            document.getElementById('btnSaveSiswa').innerText = "Perbarui Data Siswa";
+            document.getElementById('btnCancelEdit').classList.remove('hidden');
+            
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function showQRModal(index) {
+            const s = state.siswa[index];
+            document.getElementById('qr-modal-name').innerText = s.nama;
+            document.getElementById('qr-modal-nis').innerText = "NIS: " + s.nis;
+            
+            const container = document.getElementById('qrcode-container');
+            container.innerHTML = "";
+            new QRCode(container, {
+                text: s.nis,
+                width: 180,
+                height: 180,
+                colorDark : "#1e40af",
+                colorLight : "#ffffff",
+                correctLevel : QRCode.CorrectLevel.H
+            });
+            
+            document.getElementById('modal-qr').classList.remove('hidden');
+        }
+
+        function closeQRModal() {
+            document.getElementById('modal-qr').classList.add('hidden');
+        }
+
+        // Settings Management
+        function loadSettingsToUI() {
+            document.getElementById('setSystemDate').value = state.settings.systemDate;
+            document.getElementById('setJamMasuk').value = state.settings.jamMasuk;
+            document.getElementById('setJamPulang').value = state.settings.jamPulang;
+            document.getElementById('msgTepat').value = state.settings.msgTepat;
+            document.getElementById('msgTelat').value = state.settings.msgTelat;
+            document.getElementById('msgPulang').value = state.settings.msgPulang;
+            document.getElementById('msgBolos').value = state.settings.msgBolos;
+        }
+
+        function saveSettings() {
+            state.settings.systemDate = document.getElementById('setSystemDate').value;
+            state.settings.jamMasuk = document.getElementById('setJamMasuk').value;
+            state.settings.jamPulang = document.getElementById('setJamPulang').value;
+            state.settings.msgTepat = document.getElementById('msgTepat').value;
+            state.settings.msgTelat = document.getElementById('msgTelat').value;
+            state.settings.msgPulang = document.getElementById('msgPulang').value;
+            state.settings.msgBolos = document.getElementById('msgBolos').value;
+            saveState();
+            showMessage("Berhasil", "Pengaturan telah disimpan.", "success");
+        }
+
+        // Persistence & Rendering
+        function saveState() {
+            localStorage.setItem('siswa_sman1', JSON.stringify(state.siswa));
+            localStorage.setItem('absensi_sman1', JSON.stringify(state.absensi));
+            localStorage.setItem('settings_sman1', JSON.stringify(state.settings));
+            renderAll();
+        }
+
+        function renderAll() {
+            const logs = state.absensi.filter(a => a.tanggal === state.settings.systemDate);
+            document.getElementById('stat-tepat').innerText = logs.filter(a => a.status === 'Tepat Waktu').length;
+            document.getElementById('stat-telat').innerText = logs.filter(a => a.status === 'Terlambat').length;
+
+            const recentList = document.getElementById('recent-list');
+            recentList.innerHTML = logs.slice(0, 5).map(a => `
+                <div class="p-3 bg-white border-b flex justify-between items-center rounded-lg shadow-sm">
+                    <div>
+                        <p class="font-bold text-sm text-gray-800">${a.nama}</p>
+                        <p class="text-[10px] text-gray-400 uppercase font-bold">${a.tipe} • ${a.status} • ${a.waktu}</p>
+                    </div>
+                    <i class="fas fa-check-circle text-green-500"></i>
+                </div>
+            `).join('') || '<p class="text-center text-gray-400 py-4 text-xs italic">Belum ada data pada tanggal ini</p>';
+
+            const siswaTable = document.getElementById('siswa-table-body');
+            siswaTable.innerHTML = state.siswa.map((s, i) => `
+                <tr>
+                    <td class="p-4">
+                        <div class="font-bold text-sm text-gray-800">${s.nama}</div>
+                        <div class="text-[10px] text-blue-600 font-bold uppercase">${s.kelas}</div>
+                    </td>
+                    <td class="p-4 text-xs font-mono text-gray-500">${s.nis}</td>
+                    <td class="p-4">
+                        <div class="flex items-center justify-center space-x-2">
+                            <button onclick="showQRModal(${i})" title="Lihat QR Code" class="p-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 transition"><i class="fas fa-qrcode"></i></button>
+                            <button onclick="editSiswa(${i})" title="Edit Data" class="p-2 bg-yellow-100 text-yellow-600 rounded-lg hover:bg-yellow-200 transition"><i class="fas fa-edit"></i></button>
+                            <button onclick="hapusSiswa(${i})" title="Hapus" class="p-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition"><i class="fas fa-trash"></i></button>
+                        </div>
+                    </td>
+                </tr>
+            `).join('') || '<tr><td colspan="3" class="p-8 text-center text-gray-400 italic text-sm">Belum ada data siswa. Silakan tambah atau impor.</td></tr>';
+
+            renderRekap(logs);
+        }
+
+        function renderRekap(logs) {
+            const container = document.getElementById('rekap-container');
+            const sections = ['MASUK', 'PULANG', 'TIDAK HADIR'];
+            
+            const hasAbsenNis = new Set(logs.filter(l => l.tipe === 'MASUK').map(l => l.nis));
+            const bolos = state.siswa.filter(s => !hasAbsenNis.has(s.nis));
+
+            container.innerHTML = sections.map(sec => {
+                let data = [];
+                let color = "";
+                if (sec === 'MASUK') { data = logs.filter(l => l.tipe === 'MASUK'); color = "border-blue-500"; }
+                else if (sec === 'PULANG') { data = logs.filter(l => l.tipe === 'PULANG'); color = "border-orange-500"; }
+                else { data = bolos; color = "border-red-600"; }
+
+                return `
+                    <div class="glass-card overflow-hidden border-t-4 ${color}">
+                        <div class="p-3 bg-gray-50 flex justify-between items-center">
+                            <h3 class="font-bold text-xs uppercase text-gray-600">${sec}</h3>
+                            <span class="text-[10px] font-bold bg-white px-2 py-1 rounded-full shadow-sm text-gray-500">${data.length} Orang</span>
+                        </div>
+                        <div class="p-4 space-y-3">
+                            ${data.map(item => `
+                                <div class="flex justify-between items-center text-sm border-b border-gray-50 pb-2 last:border-0">
+                                    <div>
+                                        <div class="font-bold text-gray-800">${item.nama}</div>
+                                        <div class="text-[10px] text-gray-400 font-bold uppercase">
+                                            ${sec === 'TIDAK HADIR' ? 'TIDAK ADA KETERANGAN' : `${item.status} • ${item.waktu}`}
+                                        </div>
+                                    </div>
+                                    <button onclick="sendWA('${item.nis}', '${sec}')" class="bg-green-500 text-white px-3 py-1 rounded-full text-[10px] font-bold shadow-sm hover:bg-green-600 active:scale-95 transition">
+                                        <i class="fab fa-whatsapp"></i> WA
+                                    </button>
+                                </div>
+                            `).join('') || '<p class="text-xs text-gray-400 italic py-2">Tidak ada data</p>'}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // WhatsApp Integration
+        function sendWA(nis, tipe) {
+            const siswa = state.siswa.find(s => s.nis === nis);
+            if (!siswa || !siswa.hp) return showMessage("Gagal", "Nomor WhatsApp Ortu tidak ditemukan.", "error");
+
+            let template = "";
+            let log = null;
+
+            if (tipe === 'TIDAK HADIR') {
+                template = state.settings.msgBolos;
+            } else {
+                log = state.absensi.find(a => a.nis === nis && a.tanggal === state.settings.systemDate && a.tipe === tipe);
+                if (!log) return;
+                if (tipe === 'MASUK') template = log.status === 'Terlambat' ? state.settings.msgTelat : state.settings.msgTepat;
+                else template = state.settings.msgPulang;
+            }
+
+            const pesan = template
+                .replace('[nama]', siswa.nama)
+                .replace('[kelas]', siswa.kelas)
+                .replace('[waktu]', log ? log.waktu : '--:--')
+                .replace('[tanggal]', state.settings.systemDate)
+                .replace('[status]', log ? log.status : 'Tidak Hadir');
+
+            window.open(`https://api.whatsapp.com/send?phone=${siswa.hp}&text=${encodeURIComponent(pesan)}`, '_blank');
+        }
+
+        // Excel Export/Import
+        function exportToExcel() {
+            if (state.absensi.length === 0) return showMessage("Info", "Data absensi masih kosong.", "info");
+            const ws = XLSX.utils.json_to_sheet(state.absensi);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Rekap");
+            XLSX.writeFile(wb, `Rekap_Absensi_SMAN1MOTUI_${state.settings.systemDate}.xlsx`);
+        }
+
+        function importFromExcel(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const data = XLSX.read(e.target.result, { type: 'binary' });
+                const json = XLSX.utils.sheet_to_json(data.Sheets[data.SheetNames[0]]);
+                json.forEach(row => {
+                    const s = {
+                        nama: row.Nama || row.nama || "",
+                        kelas: row.Kelas || row.kelas || "",
+                        nis: String(row.NIS || row.nis || ""),
+                        hp: String(row.HP || row.hp || "")
+                    };
+                    if (s.nama && s.nis) state.siswa.push(s);
+                });
+                saveState();
+                showMessage("Berhasil", "Data siswa telah diimpor.", "success");
+            };
+            reader.readAsBinaryString(file);
+        }
+
+        function downloadSampleExcel() {
+            const sample = [{ Nama: "Ahmad Fauzi", Kelas: "X IPA 1", NIS: "2024001", HP: "628123456789" }];
+            const ws = XLSX.utils.json_to_sheet(sample);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Sample");
+            XLSX.writeFile(wb, "Contoh_Data_Siswa.xlsx");
+        }
+
+        function hapusSiswa(i) { 
+            if(confirm("Hapus data siswa ini? Semua log absensi tidak akan terhapus tapi data identitas hilang.")) { 
+                state.siswa.splice(i, 1); 
+                saveState(); 
+            } 
+        }
+        
+        function closeModal() { document.getElementById('modal-notif').classList.add('hidden'); }
+
+        function showMessage(t, d, type) {
+            const icon = document.getElementById('modal-icon');
+            icon.className = `w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl ${type === 'success' ? 'bg-green-100 text-green-600' : (type === 'error' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600')}`;
+            icon.innerHTML = `<i class="fas ${type === 'success' ? 'fa-check' : (type === 'error' ? 'fa-times' : 'fa-info')}"></i>`;
+            document.getElementById('modal-title').innerText = t;
+            document.getElementById('modal-desc').innerText = d;
+            document.getElementById('modal-notif').classList.remove('hidden');
+        }
+
+        window.onload = () => { renderAll(); updateClock(); };
+    </script>
+</body>
+</html>
