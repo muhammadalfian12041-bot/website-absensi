@@ -146,11 +146,16 @@
 
         <!-- REKAPITULASI -->
         <section id="content-rekap" class="hidden space-y-6">
-            <div class="flex justify-between items-center">
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <h2 class="font-bold text-xl text-gray-800">Laporan Kehadiran</h2>
-                <button onclick="exportToExcel()" class="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center">
-                    <i class="fas fa-file-excel mr-2"></i> DOWNLOAD EXCEL
-                </button>
+                <div class="flex flex-wrap gap-2">
+                    <button onclick="exportToExcel()" class="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center hover:bg-green-700 transition">
+                        <i class="fas fa-file-excel mr-2"></i> DOWNLOAD EXCEL
+                    </button>
+                    <button onclick="confirmClearRekap()" class="bg-red-500 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center hover:bg-red-600 transition">
+                        <i class="fas fa-trash-alt mr-2"></i> HAPUS SEMUA REKAP
+                    </button>
+                </div>
             </div>
             <div id="rekap-container" class="space-y-4"></div>
         </section>
@@ -213,6 +218,21 @@
         </div>
     </div>
 
+    <!-- Modal Konfirmasi Hapus -->
+    <div id="modal-confirm" class="fixed inset-0 bg-black/70 z-[100] hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl p-8 max-w-sm w-full text-center">
+            <div class="w-16 h-16 rounded-full bg-red-100 text-red-600 flex items-center justify-center mx-auto mb-4 text-3xl">
+                <i class="fas fa-exclamation-triangle"></i>
+            </div>
+            <h2 class="text-xl font-bold mb-2 text-gray-800">Hapus Semua Data?</h2>
+            <p class="text-gray-500 mb-6 text-sm">Tindakan ini akan menghapus seluruh riwayat absensi secara permanen. Anda disarankan mengunduh rekap Excel terlebih dahulu.</p>
+            <div class="flex space-x-2">
+                <button onclick="closeConfirmModal()" class="flex-1 bg-gray-200 text-gray-700 py-3 rounded-2xl font-bold">BATAL</button>
+                <button onclick="clearAllRekap()" class="flex-1 bg-red-600 text-white py-3 rounded-2xl font-bold">HAPUS</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Modal QR Code -->
     <div id="modal-qr" class="fixed inset-0 bg-black/80 z-[110] hidden flex items-center justify-center p-4">
         <div class="bg-white rounded-3xl p-6 max-w-xs w-full text-center relative">
@@ -243,6 +263,7 @@
             },
             currentTab: 'dashboard',
             isScannerRunning: false,
+            isTransitioning: false,
             lastScanned: null
         };
 
@@ -261,7 +282,12 @@
 
         // Navigasi Tab
         async function switchTab(tabId) {
-            if (state.currentTab === 'scan' && state.isScannerRunning) await stopScanner();
+            if (state.isTransitioning) return;
+            
+            if (state.currentTab === 'scan' && state.isScannerRunning) {
+                await stopScanner();
+            }
+
             document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
             document.querySelectorAll('nav button').forEach(b => b.classList.remove('tab-active', 'text-blue-800'));
             
@@ -269,23 +295,48 @@
             document.getElementById('tab-' + tabId).classList.add('tab-active', 'text-blue-800');
             state.currentTab = tabId;
             
-            if (tabId === 'scan') setTimeout(startScanner, 200);
+            if (tabId === 'scan') {
+                setTimeout(startScanner, 300);
+            }
             if (tabId === 'settings') loadSettingsToUI();
             renderAll();
         }
 
         // Scanner Logic
-        function startScanner() {
+        async function startScanner() {
+            if (state.isScannerRunning || state.isTransitioning) return;
+            state.isTransitioning = true;
+            
             const qrBoxSize = (vW, vH) => {
                 let size = Math.min(vW, vH) * 0.7;
                 return { width: size, height: size };
             };
-            html5QrCode.start({ facingMode: "environment" }, { fps: 20, qrbox: qrBoxSize }, onScanSuccess)
-                .then(() => state.isScannerRunning = true);
+
+            try {
+                await html5QrCode.start(
+                    { facingMode: "environment" }, 
+                    { fps: 20, qrbox: qrBoxSize }, 
+                    onScanSuccess
+                );
+                state.isScannerRunning = true;
+            } catch (err) {
+                console.error("Gagal menjalankan scanner:", err);
+            } finally {
+                state.isTransitioning = false;
+            }
         }
 
         async function stopScanner() { 
-            try { await html5QrCode.stop(); state.isScannerRunning = false; } catch (e) {} 
+            if (!state.isScannerRunning || state.isTransitioning) return;
+            state.isTransitioning = true;
+            try { 
+                await html5QrCode.stop(); 
+                state.isScannerRunning = false; 
+            } catch (e) {
+                console.warn("Gagal menghentikan scanner:", e);
+            } finally {
+                state.isTransitioning = false;
+            }
         }
 
         function onScanSuccess(decodedText) {
@@ -413,6 +464,23 @@
             state.settings.msgBolos = document.getElementById('msgBolos').value;
             saveState();
             showMessage("Berhasil", "Pengaturan telah disimpan.", "success");
+        }
+
+        // Rekap Actions
+        function confirmClearRekap() {
+            if (state.absensi.length === 0) return showMessage("Info", "Tidak ada data rekap yang bisa dihapus.", "info");
+            document.getElementById('modal-confirm').classList.remove('hidden');
+        }
+
+        function closeConfirmModal() {
+            document.getElementById('modal-confirm').classList.add('hidden');
+        }
+
+        function clearAllRekap() {
+            state.absensi = [];
+            saveState();
+            closeConfirmModal();
+            showMessage("Berhasil", "Seluruh data rekap telah dibersihkan.", "success");
         }
 
         // Persistence & Rendering
