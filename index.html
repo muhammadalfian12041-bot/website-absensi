@@ -3,12 +3,132 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Absensi Online SMAN 1 MOTUI</title>
+    <title>Absensi Online SMAN 1 MOTUI - Multi User</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/html5-qrcode"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    
+    <!-- Firebase SDK -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc, collection, onSnapshot, addDoc, updateDoc, deleteDoc, query, writeBatch } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        const firebaseConfig = JSON.parse(__firebase_config);
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'sman1motui-app';
+
+        // Global State
+        window.state = {
+            user: null,
+            siswa: [],
+            absensi: [],
+            settings: { 
+                jamMasuk: "07:30",
+                jamPulang: "14:00",
+                systemDate: new Date().toISOString().split('T')[0],
+                msgTepat: "Pemberitahuan: [nama] ([kelas]) telah hadir TEPAT WAKTU pada pukul [waktu] tanggal [tanggal].",
+                msgTelat: "Peringatan: [nama] ([kelas]) hadir TERLAMBAT pada pukul [waktu] tanggal [tanggal]. Mohon diingatkan.",
+                msgPulang: "Info: [nama] ([kelas]) telah melakukan absen PULANG pada pukul [waktu]. Terima kasih.",
+                msgBolos: "PENTING: [nama] ([kelas]) TIDAK TERDETEKSI melakukan absensi hingga saat ini (tanggal [tanggal]). Mohon konfirmasi."
+            },
+            currentTab: 'dashboard',
+            currentRekapTab: 'masuk'
+        };
+
+        // --- AUTHENTICATION ---
+        async function initAuth() {
+            try {
+                await signInAnonymously(auth);
+            } catch (error) {
+                console.error("Auth error:", error);
+                alert("Gagal terhubung ke server cloud.");
+            }
+        }
+
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                window.state.user = user;
+                document.getElementById('user-id-display').innerText = `ID Petugas: ${user.uid.substring(0,8)}`;
+                initDataListeners();
+            }
+        });
+
+        // --- FIRESTORE LISTENERS (Real-time Sync) ---
+        function initDataListeners() {
+            if (!window.state.user) return;
+
+            // 1. Settings Listener
+            onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'settings'), (docSnap) => {
+                if (docSnap.exists()) {
+                    window.state.settings = docSnap.data();
+                    updateClock();
+                    if (window.state.currentTab === 'settings') loadSettingsToUI();
+                } else {
+                    // Initialize default settings if not exists
+                    setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings'), window.state.settings);
+                }
+            }, (err) => console.error("Settings listener err:", err));
+
+            // 2. Siswa Listener
+            onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'siswa'), (querySnapshot) => {
+                window.state.siswa = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                renderAll();
+            }, (err) => console.error("Siswa listener err:", err));
+
+            // 3. Absensi Listener
+            onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'absensi'), (querySnapshot) => {
+                window.state.absensi = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+                    .sort((a, b) => b.timestamp - a.timestamp);
+                renderAll();
+            }, (err) => console.error("Absensi listener err:", err));
+        }
+
+        // --- ACTIONS ---
+        window.saveSiswaCloud = async (siswaData) => {
+            if (!window.state.user) return;
+            const editId = document.getElementById('edit-index').value;
+            if (editId === "-1") {
+                await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'siswa'), siswaData);
+            } else {
+                await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'siswa', editId), siswaData);
+            }
+        };
+
+        window.deleteSiswaCloud = async (id) => {
+            if (!window.state.user) return;
+            await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'siswa', id));
+        };
+
+        window.saveAbsensiCloud = async (absenData) => {
+            if (!window.state.user) return;
+            absenData.timestamp = Date.now();
+            await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'absensi'), absenData);
+        };
+
+        window.updateSettingsCloud = async (newSettings) => {
+            if (!window.state.user) return;
+            await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings'), newSettings);
+        };
+
+        window.clearRekapCloud = async () => {
+            if (!window.state.user) return;
+            const batch = writeBatch(db);
+            window.state.absensi.forEach(item => {
+                const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'absensi', item.id);
+                batch.delete(docRef);
+            });
+            await batch.commit();
+        };
+
+        // Start Auth
+        initAuth();
+    </script>
+
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
         body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
@@ -17,12 +137,10 @@
         #reader { border-radius: 1rem; overflow: hidden; border: none !important; background: #000; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        
         @media print {
             body * { visibility: hidden; }
             #modal-qr, #modal-qr * { visibility: visible; }
             #modal-qr { position: absolute; left: 0; top: 0; width: 100%; }
-            button { display: none !important; }
         }
     </style>
 </head>
@@ -36,7 +154,7 @@
                 </div>
                 <div>
                     <h1 class="text-xl font-bold">SMAN 1 MOTUI</h1>
-                    <p class="text-xs opacity-80 uppercase tracking-wider">Sistem Absensi Terintegrasi</p>
+                    <p id="user-id-display" class="text-[10px] opacity-70 font-mono">Menghubungkan...</p>
                 </div>
             </div>
             <div class="text-right">
@@ -82,7 +200,7 @@
             </div>
             <div class="glass-card p-6">
                 <h4 class="font-bold mb-4 flex items-center text-gray-700">
-                    <i class="fas fa-history mr-2 text-blue-600"></i> Aktivitas Log Hari Ini
+                    <i class="fas fa-history mr-2 text-blue-600"></i> Aktivitas Log (Live)
                 </h4>
                 <div id="recent-list" class="space-y-3"></div>
             </div>
@@ -103,9 +221,9 @@
         <section id="content-siswa" class="hidden space-y-4">
             <div class="glass-card p-6">
                 <div class="flex justify-between items-center mb-4">
-                    <h2 id="form-siswa-title" class="font-bold text-lg text-blue-800">Tambah Data Siswa</h2>
+                    <h2 id="form-siswa-title" class="font-bold text-lg text-blue-800">Manajemen Siswa</h2>
                     <div class="flex space-x-2">
-                        <button onclick="downloadSampleExcel()" class="bg-gray-100 text-gray-700 px-3 py-2 rounded-lg text-xs font-bold">CONTOH</button>
+                        <button onclick="downloadSampleExcel()" class="bg-gray-100 text-gray-700 px-3 py-2 rounded-lg text-xs font-bold">FORMAT</button>
                         <label class="bg-blue-600 text-white px-3 py-2 rounded-lg text-xs font-bold cursor-pointer hover:bg-blue-700">
                             IMPOR
                             <input type="file" class="hidden" accept=".xlsx, .xls" onchange="importFromExcel(event)">
@@ -117,24 +235,23 @@
                     <input type="text" id="inputNama" placeholder="Nama Lengkap" class="p-3 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500">
                     <input type="text" id="inputKelas" placeholder="Kelas" class="p-3 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500">
                     <input type="text" id="inputNIS" placeholder="NIS / ID QR" class="p-3 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500">
-                    <input type="tel" id="inputHpOrtu" placeholder="WhatsApp Ortu (Contoh: 628...)" class="p-3 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500">
+                    <input type="tel" id="inputHpOrtu" placeholder="WhatsApp Ortu (628...)" class="p-3 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500">
                 </div>
                 <div class="flex space-x-2">
-                    <button id="btnSaveSiswa" onclick="saveSiswa()" class="flex-1 bg-blue-700 text-white py-3 rounded-xl font-bold hover:bg-blue-800 transition">Simpan Siswa</button>
+                    <button id="btnSaveSiswa" onclick="saveSiswa()" class="flex-1 bg-blue-700 text-white py-3 rounded-xl font-bold hover:bg-blue-800">Simpan Ke Cloud</button>
                     <button id="btnCancelEdit" onclick="resetFormSiswa()" class="hidden bg-gray-400 text-white py-3 px-6 rounded-xl font-bold">Batal</button>
                 </div>
             </div>
             
             <div class="glass-card overflow-hidden">
                 <div class="p-4 bg-blue-50 border-b">
-                    <h3 class="font-bold text-sm text-blue-800">Daftar Seluruh Siswa</h3>
+                    <h3 class="font-bold text-sm text-blue-800">Database Siswa Terpusat</h3>
                 </div>
                 <div class="overflow-x-auto">
                     <table class="w-full text-left">
                         <thead class="bg-gray-50">
                             <tr>
                                 <th class="p-4 text-xs font-bold uppercase text-gray-500">Siswa / Kelas</th>
-                                <th class="p-4 text-xs font-bold uppercase text-gray-500">NIS/ID</th>
                                 <th class="p-4 text-xs font-bold uppercase text-gray-500 text-center">Aksi</th>
                             </tr>
                         </thead>
@@ -147,486 +264,290 @@
         <!-- REKAPITULASI -->
         <section id="content-rekap" class="hidden space-y-6">
             <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                <h2 class="font-bold text-xl text-gray-800">Rekapitulasi Kehadiran</h2>
-                <div class="flex space-x-2">
-                    <button onclick="exportToExcel()" class="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center hover:bg-green-700 transition">
-                        <i class="fas fa-file-excel mr-2"></i> EXPORT EXCEL
-                    </button>
-                </div>
+                <h2 class="font-bold text-xl text-gray-800">Rekapitulasi Global</h2>
+                <button onclick="exportToExcel()" class="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center hover:bg-green-700">
+                    <i class="fas fa-file-excel mr-2"></i> EXPORT DATA
+                </button>
             </div>
 
-            <!-- TAB REKAP KHUSUS -->
             <div class="flex bg-gray-200 p-1 rounded-xl">
-                <button onclick="switchRekapTab('masuk')" id="btn-rekap-masuk" class="flex-1 py-2 text-xs font-bold rounded-lg bg-white shadow text-blue-800">SISWA MASUK</button>
-                <button onclick="switchRekapTab('pulang')" id="btn-rekap-pulang" class="flex-1 py-2 text-xs font-bold rounded-lg text-gray-600">SISWA PULANG</button>
+                <button onclick="switchRekapTab('masuk')" id="btn-rekap-masuk" class="flex-1 py-2 text-xs font-bold rounded-lg bg-white shadow text-blue-800">MASUK</button>
+                <button onclick="switchRekapTab('pulang')" id="btn-rekap-pulang" class="flex-1 py-2 text-xs font-bold rounded-lg text-gray-600">PULANG</button>
                 <button onclick="switchRekapTab('tidak-hadir')" id="btn-rekap-tidak-hadir" class="flex-1 py-2 text-xs font-bold rounded-lg text-gray-600">TIDAK HADIR</button>
             </div>
 
-            <div id="rekap-list-content" class="space-y-4">
-                <!-- Content will be injected here -->
-            </div>
+            <div id="rekap-list-content" class="space-y-4"></div>
         </section>
 
         <!-- PENGATURAN -->
         <section id="content-settings" class="hidden space-y-6">
             <div class="glass-card p-6">
-                <h2 class="font-bold text-lg mb-4 text-gray-800 border-b pb-2"><i class="fas fa-calendar-alt mr-2 text-blue-600"></i>Konfigurasi Waktu</h2>
+                <h2 class="font-bold text-lg mb-4 text-gray-800 border-b pb-2"><i class="fas fa-calendar-alt mr-2 text-blue-600"></i>Sinkronisasi Cloud</h2>
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
-                        <label class="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-tight">Tanggal Aktif</label>
-                        <input type="date" id="setSystemDate" class="w-full p-3 border rounded-xl focus:ring-2 focus:ring-blue-500">
+                        <label class="block text-xs font-bold text-gray-500 mb-1">Tanggal Absensi</label>
+                        <input type="date" id="setSystemDate" class="w-full p-3 border rounded-xl">
                     </div>
                     <div>
-                        <label class="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-tight">Batas Jam Masuk</label>
-                        <input type="time" id="setJamMasuk" class="w-full p-3 border rounded-xl focus:ring-2 focus:ring-blue-500">
+                        <label class="block text-xs font-bold text-gray-500 mb-1">Batas Telat</label>
+                        <input type="time" id="setJamMasuk" class="w-full p-3 border rounded-xl">
                     </div>
                     <div>
-                        <label class="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-tight">Jam Pulang</label>
-                        <input type="time" id="setJamPulang" class="w-full p-3 border rounded-xl focus:ring-2 focus:ring-blue-500">
+                        <label class="block text-xs font-bold text-gray-500 mb-1">Jam Pulang</label>
+                        <input type="time" id="setJamPulang" class="w-full p-3 border rounded-xl">
                     </div>
                 </div>
-            </div>
-
-            <div class="glass-card p-6">
-                <h2 class="font-bold text-lg mb-4 text-gray-800 border-b pb-2"><i class="fas fa-comment-dots mr-2 text-blue-600"></i>Template WhatsApp</h2>
-                <div class="space-y-4">
-                    <div>
-                        <label class="block text-xs font-bold text-gray-500 mb-1 uppercase">Pesan Tepat Waktu</label>
-                        <textarea id="msgTepat" rows="2" class="w-full p-3 border rounded-xl text-sm"></textarea>
-                    </div>
-                    <div>
-                        <label class="block text-xs font-bold text-gray-500 mb-1 uppercase">Pesan Terlambat</label>
-                        <textarea id="msgTelat" rows="2" class="w-full p-3 border rounded-xl text-sm"></textarea>
-                    </div>
-                    <div>
-                        <label class="block text-xs font-bold text-gray-500 mb-1 uppercase">Pesan Pulang</label>
-                        <textarea id="msgPulang" rows="2" class="w-full p-3 border rounded-xl text-sm"></textarea>
-                    </div>
-                    <div>
-                        <label class="block text-xs font-bold text-gray-500 mb-1 uppercase">Pesan Tidak Hadir</label>
-                        <textarea id="msgBolos" rows="2" class="w-full p-3 border rounded-xl text-sm"></textarea>
-                    </div>
-                </div>
-                <button onclick="saveSettings()" class="w-full bg-blue-900 text-white py-4 rounded-xl font-bold mt-6 hover:bg-black transition">SIMPAN PENGATURAN</button>
+                <button onclick="saveSettings()" class="w-full bg-blue-900 text-white py-4 rounded-xl font-bold mt-6">UPDATE PENGATURAN (SEMUA USER)</button>
             </div>
         </section>
 
     </main>
 
-    <!-- Modals -->
+    <!-- Modal Notification -->
     <div id="modal-notif" class="fixed inset-0 bg-black/70 z-[100] hidden flex items-center justify-center p-4">
         <div class="bg-white rounded-3xl p-8 max-w-sm w-full text-center">
             <div id="modal-icon" class="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl"></div>
             <h2 id="modal-title" class="text-xl font-bold mb-2"></h2>
             <p id="modal-desc" class="text-gray-500 mb-6 text-sm"></p>
-            <button onclick="closeModal()" class="w-full bg-blue-700 text-white py-4 rounded-2xl font-bold transition">TUTUP</button>
+            <button onclick="closeModal()" class="w-full bg-blue-700 text-white py-4 rounded-2xl font-bold">OK</button>
         </div>
     </div>
 
-    <!-- Modal Konfirmasi Hapus (Ditempatkan sesuai permintaan di menu rekap tidak hadir) -->
+    <!-- Modal Konfirmasi -->
     <div id="modal-confirm" class="fixed inset-0 bg-black/70 z-[100] hidden flex items-center justify-center p-4">
         <div class="bg-white rounded-3xl p-8 max-w-sm w-full text-center">
-            <div class="w-16 h-16 rounded-full bg-red-100 text-red-600 flex items-center justify-center mx-auto mb-4 text-3xl">
-                <i class="fas fa-trash-alt"></i>
-            </div>
-            <h2 class="text-xl font-bold mb-2">Hapus Rekapitulasi?</h2>
-            <p class="text-gray-500 mb-6 text-sm">Semua riwayat absensi akan dihapus permanen dari sistem. Pastikan data sudah di-export jika diperlukan.</p>
+            <div class="w-16 h-16 rounded-full bg-red-100 text-red-600 flex items-center justify-center mx-auto mb-4 text-3xl"><i class="fas fa-trash-alt"></i></div>
+            <h2 class="text-xl font-bold mb-2">Hapus Rekap Cloud?</h2>
+            <p class="text-gray-500 mb-6 text-sm">Semua petugas akan kehilangan data ini.</p>
             <div class="flex space-x-2">
-                <button onclick="closeConfirmModal()" class="flex-1 bg-gray-200 text-gray-700 py-3 rounded-2xl font-bold">BATAL</button>
-                <button onclick="clearAllRekap()" class="flex-1 bg-red-600 text-white py-3 rounded-2xl font-bold">YA, HAPUS</button>
+                <button onclick="closeConfirmModal()" class="flex-1 bg-gray-200 py-3 rounded-2xl font-bold">BATAL</button>
+                <button onclick="handleClearRekap()" class="flex-1 bg-red-600 text-white py-3 rounded-2xl font-bold">HAPUS</button>
             </div>
         </div>
     </div>
 
-    <!-- Modal QR Code -->
+    <!-- Modal QR -->
     <div id="modal-qr" class="fixed inset-0 bg-black/80 z-[110] hidden flex items-center justify-center p-4">
         <div class="bg-white rounded-3xl p-6 max-w-xs w-full text-center relative">
-            <button onclick="closeQRModal()" class="absolute top-4 right-4 text-gray-400 hover:text-red-500 transition"><i class="fas fa-times text-xl"></i></button>
+            <button onclick="closeQRModal()" class="absolute top-4 right-4 text-gray-400"><i class="fas fa-times text-xl"></i></button>
             <h3 id="qr-modal-name" class="font-bold text-blue-800 mb-1">Nama Siswa</h3>
-            <p id="qr-modal-nis" class="text-xs text-gray-400 mb-6 font-mono">NIS: 000000</p>
-            <div id="qrcode-container" class="flex justify-center mb-6 bg-white p-4 rounded-xl shadow-inner border"></div>
-            <button onclick="window.print()" class="w-full bg-gray-100 text-gray-700 py-3 rounded-xl font-bold mb-2 flex items-center justify-center">
-                <i class="fas fa-print mr-2"></i> Cetak QR
-            </button>
-            <button onclick="closeQRModal()" class="w-full bg-blue-700 text-white py-3 rounded-xl font-bold transition">Tutup</button>
+            <div id="qrcode-container" class="flex justify-center my-6"></div>
+            <button onclick="window.print()" class="w-full bg-gray-100 py-3 rounded-xl font-bold mb-2">CETAK</button>
         </div>
     </div>
 
     <script>
-        // State Initialization
-        let state = {
-            siswa: JSON.parse(localStorage.getItem('siswa_sman1')) || [],
-            absensi: JSON.parse(localStorage.getItem('absensi_sman1')) || [],
-            settings: JSON.parse(localStorage.getItem('settings_sman1')) || { 
-                jamMasuk: "07:30",
-                jamPulang: "14:00",
-                systemDate: new Date().toISOString().split('T')[0],
-                msgTepat: "Pemberitahuan: [nama] ([kelas]) telah hadir TEPAT WAKTU pada pukul [waktu] tanggal [tanggal].",
-                msgTelat: "Peringatan: [nama] ([kelas]) hadir TERLAMBAT pada pukul [waktu] tanggal [tanggal]. Mohon diingatkan.",
-                msgPulang: "Info: [nama] ([kelas]) telah melakukan absen PULANG pada pukul [waktu]. Terima kasih.",
-                msgBolos: "PENTING: [nama] ([kelas]) TIDAK TERDETEKSI melakukan absensi hingga saat ini (tanggal [tanggal]). Mohon konfirmasi."
-            },
-            currentTab: 'dashboard',
-            currentRekapTab: 'masuk',
-            isScannerRunning: false,
-            isTransitioning: false,
-            lastScanned: null
-        };
-
         const html5QrCode = new Html5Qrcode("reader");
 
-        // UI Helpers
         function updateClock() {
             const now = new Date();
             document.getElementById('currentTime').innerText = now.toLocaleTimeString('id-ID', { hour12: false });
-            const sysDate = new Date(state.settings.systemDate);
+            const sysDate = new Date(window.state.settings.systemDate);
             document.getElementById('activeDateDisplay').innerText = sysDate.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
         }
         setInterval(updateClock, 1000);
 
         async function switchTab(tabId) {
-            if (state.isTransitioning) return;
-            if (state.currentTab === 'scan' && state.isScannerRunning) await stopScanner();
-
+            if (window.state.currentTab === 'scan') await html5QrCode.stop().catch(() => {});
+            
             document.querySelectorAll('main > section').forEach(s => s.classList.add('hidden'));
             document.querySelectorAll('nav button').forEach(b => b.classList.remove('tab-active', 'text-blue-800'));
             
             document.getElementById('content-' + tabId).classList.remove('hidden');
             document.getElementById('tab-' + tabId).classList.add('tab-active', 'text-blue-800');
-            state.currentTab = tabId;
+            window.state.currentTab = tabId;
             
-            if (tabId === 'scan') setTimeout(startScanner, 300);
-            if (tabId === 'settings') loadSettingsToUI();
+            if (tabId === 'scan') {
+                html5QrCode.start({ facingMode: "environment" }, { fps: 20, qrbox: 250 }, onScanSuccess);
+            }
             renderAll();
         }
 
-        // Scanner Logic
-        async function startScanner() {
-            if (state.isScannerRunning || state.isTransitioning) return;
-            state.isTransitioning = true;
-            try {
-                await html5QrCode.start({ facingMode: "environment" }, { fps: 20, qrbox: 250 }, onScanSuccess);
-                state.isScannerRunning = true;
-            } catch (err) { console.error(err); } 
-            finally { state.isTransitioning = false; }
-        }
-
-        async function stopScanner() {
-            if (!state.isScannerRunning || state.isTransitioning) return;
-            state.isTransitioning = true;
-            try { await html5QrCode.stop(); state.isScannerRunning = false; } catch (e) { } 
-            finally { state.isTransitioning = false; }
-        }
-
         function onScanSuccess(decodedText) {
-            if (state.lastScanned === decodedText) return;
-            const targetSiswa = state.siswa.find(s => s.nis === decodedText);
-            
-            if (!targetSiswa) {
-                state.lastScanned = decodedText;
-                setTimeout(() => state.lastScanned = null, 3000);
-                return showMessage("Gagal", "ID Siswa tidak ditemukan!", "error");
-            }
-
-            state.lastScanned = decodedText;
-            setTimeout(() => state.lastScanned = null, 5000);
+            const targetSiswa = window.state.siswa.find(s => s.nis === decodedText);
+            if (!targetSiswa) return;
 
             const now = new Date();
             const timeStr = now.getHours().toString().padStart(2, '0') + ":" + now.getMinutes().toString().padStart(2, '0');
-            const type = timeStr >= state.settings.jamPulang ? 'PULANG' : 'MASUK';
+            const type = timeStr >= window.state.settings.jamPulang ? 'PULANG' : 'MASUK';
             
-            const exists = state.absensi.find(a => a.nis === decodedText && a.tanggal === state.settings.systemDate && a.tipe === type);
-            if (exists) return showMessage("Peringatan", `${targetSiswa.nama} sudah absen ${type.toLowerCase()}.`, "info");
+            const exists = window.state.absensi.find(a => a.nis === decodedText && a.tanggal === window.state.settings.systemDate && a.tipe === type);
+            if (exists) return;
 
-            let status = type === 'MASUK' ? (timeStr > state.settings.jamMasuk ? 'Terlambat' : 'Tepat Waktu') : 'Pulang';
+            let status = type === 'MASUK' ? (timeStr > window.state.settings.jamMasuk ? 'Terlambat' : 'Tepat Waktu') : 'Pulang';
 
-            state.absensi.unshift({
+            window.saveAbsensiCloud({
                 nama: targetSiswa.nama, kelas: targetSiswa.kelas, nis: targetSiswa.nis, hp: targetSiswa.hp,
-                waktu: timeStr, tanggal: state.settings.systemDate, status: status, tipe: type
+                waktu: timeStr, tanggal: window.state.settings.systemDate, status: status, tipe: type
             });
 
-            saveState();
             document.getElementById('scan-feedback').classList.remove('hidden');
             setTimeout(() => document.getElementById('scan-feedback').classList.add('hidden'), 2000);
-            
-            const utter = new SpeechSynthesisUtterance(`Absen ${type.toLowerCase()} ${targetSiswa.nama} berhasil.`);
-            utter.lang = 'id-ID'; window.speechSynthesis.speak(utter);
         }
 
-        // Siswa CRUD
-        function saveSiswa() {
-            const nama = document.getElementById('inputNama').value.trim();
-            const kelas = document.getElementById('inputKelas').value.trim();
-            const nis = document.getElementById('inputNIS').value.trim();
-            const hp = document.getElementById('inputHpOrtu').value.trim();
-            const editIndex = parseInt(document.getElementById('edit-index').value);
-
-            if (!nama || !nis || !kelas) return showMessage("Error", "Lengkapi semua data utama.", "error");
-
-            if (editIndex === -1) {
-                state.siswa.push({ nama, kelas, nis, hp });
-                showMessage("Sukses", "Data siswa ditambahkan.", "success");
-            } else {
-                state.siswa[editIndex] = { nama, kelas, nis, hp };
-                showMessage("Sukses", "Data siswa diperbarui.", "success");
-            }
-            saveState(); resetFormSiswa();
+        async function saveSiswa() {
+            const s = {
+                nama: document.getElementById('inputNama').value.trim(),
+                kelas: document.getElementById('inputKelas').value.trim(),
+                nis: document.getElementById('inputNIS').value.trim(),
+                hp: document.getElementById('inputHpOrtu').value.trim()
+            };
+            if (!s.nama || !s.nis) return;
+            await window.saveSiswaCloud(s);
+            resetFormSiswa();
+            showMessage("Berhasil", "Data siswa tersinkronisasi ke Cloud.", "success");
         }
 
         function resetFormSiswa() {
             ["inputNama", "inputKelas", "inputNIS", "inputHpOrtu"].forEach(id => document.getElementById(id).value = "");
             document.getElementById('edit-index').value = "-1";
-            document.getElementById('form-siswa-title').innerText = "Tambah Data Siswa";
-            document.getElementById('btnSaveSiswa').innerText = "Simpan Siswa";
             document.getElementById('btnCancelEdit').classList.add('hidden');
         }
 
-        function editSiswa(index) {
-            const s = state.siswa[index];
+        function editSiswa(id) {
+            const s = window.state.siswa.find(x => x.id === id);
             document.getElementById('inputNama').value = s.nama;
             document.getElementById('inputKelas').value = s.kelas;
             document.getElementById('inputNIS').value = s.nis;
             document.getElementById('inputHpOrtu').value = s.hp;
-            document.getElementById('edit-index').value = index;
-            document.getElementById('form-siswa-title').innerText = "Ubah Data Siswa";
-            document.getElementById('btnSaveSiswa').innerText = "Perbarui Data";
+            document.getElementById('edit-index').value = id;
             document.getElementById('btnCancelEdit').classList.remove('hidden');
-            window.scrollTo({ top: 0, behavior: 'smooth' });
+            window.scrollTo(0,0);
         }
 
-        function hapusSiswa(i) {
-            if(confirm("Hapus siswa ini?")) { state.siswa.splice(i, 1); saveState(); }
+        async function hapusSiswa(id) {
+            if(confirm("Hapus siswa dari Cloud?")) await window.deleteSiswaCloud(id);
         }
 
-        function showQRModal(index) {
-            const s = state.siswa[index];
-            document.getElementById('qr-modal-name').innerText = s.nama;
-            document.getElementById('qr-modal-nis').innerText = "NIS: " + s.nis;
-            const container = document.getElementById('qrcode-container');
-            container.innerHTML = "";
-            new QRCode(container, { text: s.nis, width: 180, height: 180, colorDark : "#1e40af" });
-            document.getElementById('modal-qr').classList.remove('hidden');
-        }
-
-        function closeQRModal() { document.getElementById('modal-qr').classList.add('hidden'); }
-
-        // Settings
-        function loadSettingsToUI() {
-            document.getElementById('setSystemDate').value = state.settings.systemDate;
-            document.getElementById('setJamMasuk').value = state.settings.jamMasuk;
-            document.getElementById('setJamPulang').value = state.settings.jamPulang;
-            document.getElementById('msgTepat').value = state.settings.msgTepat;
-            document.getElementById('msgTelat').value = state.settings.msgTelat;
-            document.getElementById('msgPulang').value = state.settings.msgPulang;
-            document.getElementById('msgBolos').value = state.settings.msgBolos;
-        }
-
-        function saveSettings() {
-            state.settings.systemDate = document.getElementById('setSystemDate').value;
-            state.settings.jamMasuk = document.getElementById('setJamMasuk').value;
-            state.settings.jamPulang = document.getElementById('setJamPulang').value;
-            state.settings.msgTepat = document.getElementById('msgTepat').value;
-            state.settings.msgTelat = document.getElementById('msgTelat').value;
-            state.settings.msgPulang = document.getElementById('msgPulang').value;
-            state.settings.msgBolos = document.getElementById('msgBolos').value;
-            saveState(); showMessage("Sukses", "Pengaturan disimpan.", "success");
-        }
-
-        // Rekap Tab Navigation
         function switchRekapTab(tabId) {
-            state.currentRekapTab = tabId;
+            window.state.currentRekapTab = tabId;
             document.querySelectorAll('#btn-rekap-masuk, #btn-rekap-pulang, #btn-rekap-tidak-hadir').forEach(b => {
                 b.classList.remove('bg-white', 'shadow', 'text-blue-800');
-                b.classList.add('text-gray-600');
             });
-            const activeBtn = document.getElementById('btn-rekap-' + tabId);
-            activeBtn.classList.remove('text-gray-600');
-            activeBtn.classList.add('bg-white', 'shadow', 'text-blue-800');
+            document.getElementById('btn-rekap-' + tabId).classList.add('bg-white', 'shadow', 'text-blue-800');
             renderRekapList();
         }
 
-        // Rekap Management
-        function confirmClearRekap() {
-            document.getElementById('modal-confirm').classList.remove('hidden');
+        async function saveSettings() {
+            const newSets = {...window.state.settings};
+            newSets.systemDate = document.getElementById('setSystemDate').value;
+            newSets.jamMasuk = document.getElementById('setJamMasuk').value;
+            newSets.jamPulang = document.getElementById('setJamPulang').value;
+            await window.updateSettingsCloud(newSets);
+            showMessage("Berhasil", "Pengaturan global diperbarui.", "success");
         }
 
-        function closeConfirmModal() {
-            document.getElementById('modal-confirm').classList.add('hidden');
-        }
-
-        function clearAllRekap() {
-            state.absensi = [];
-            saveState();
-            closeConfirmModal();
-            showMessage("Berhasil", "Data rekapitulasi telah dihapus.", "success");
-            renderRekapList();
-        }
-
-        // Rendering Core
-        function saveState() {
-            localStorage.setItem('siswa_sman1', JSON.stringify(state.siswa));
-            localStorage.setItem('absensi_sman1', JSON.stringify(state.absensi));
-            localStorage.setItem('settings_sman1', JSON.stringify(state.settings));
-            renderAll();
+        function loadSettingsToUI() {
+            document.getElementById('setSystemDate').value = window.state.settings.systemDate;
+            document.getElementById('setJamMasuk').value = window.state.settings.jamMasuk;
+            document.getElementById('setJamPulang').value = window.state.settings.jamPulang;
         }
 
         function renderAll() {
-            const logsToday = state.absensi.filter(a => a.tanggal === state.settings.systemDate);
+            const logsToday = window.state.absensi.filter(a => a.tanggal === window.state.settings.systemDate);
             document.getElementById('stat-tepat').innerText = logsToday.filter(a => a.status === 'Tepat Waktu').length;
             document.getElementById('stat-telat').innerText = logsToday.filter(a => a.status === 'Terlambat').length;
 
             const recentList = document.getElementById('recent-list');
-            recentList.innerHTML = logsToday.slice(0, 5).map(a => `
-                <div class="p-3 bg-white border-b flex justify-between items-center rounded-lg shadow-sm">
+            recentList.innerHTML = logsToday.slice(0, 8).map(a => `
+                <div class="p-3 bg-white flex justify-between items-center rounded-lg shadow-sm border-l-2 border-blue-500">
                     <div>
                         <p class="font-bold text-sm text-gray-800">${a.nama}</p>
-                        <p class="text-[10px] text-gray-400 uppercase font-bold">${a.tipe} • ${a.status} • ${a.waktu}</p>
+                        <p class="text-[10px] text-gray-400 font-bold uppercase">${a.tipe} • ${a.waktu}</p>
                     </div>
-                    <i class="fas fa-check-circle text-green-500"></i>
+                    <i class="fas fa-sync text-blue-300 text-xs"></i>
                 </div>
-            `).join('') || '<p class="text-center text-gray-400 py-4 text-xs italic">Log kosong hari ini</p>';
+            `).join('') || '<p class="text-center text-gray-400 py-4 text-xs italic">Menunggu data absensi...</p>';
 
             const siswaTable = document.getElementById('siswa-table-body');
-            siswaTable.innerHTML = state.siswa.map((s, i) => `
+            siswaTable.innerHTML = window.state.siswa.map((s) => `
                 <tr>
                     <td class="p-4">
                         <div class="font-bold text-sm text-gray-800">${s.nama}</div>
                         <div class="text-[10px] text-blue-600 font-bold uppercase">${s.kelas}</div>
                     </td>
-                    <td class="p-4 text-xs font-mono text-gray-500">${s.nis}</td>
                     <td class="p-4">
                         <div class="flex items-center justify-center space-x-2">
-                            <button onclick="showQRModal(${i})" class="p-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 transition"><i class="fas fa-qrcode"></i></button>
-                            <button onclick="editSiswa(${i})" class="p-2 bg-yellow-100 text-yellow-600 rounded-lg hover:bg-yellow-200 transition"><i class="fas fa-edit"></i></button>
-                            <button onclick="hapusSiswa(${i})" class="p-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition"><i class="fas fa-trash"></i></button>
+                            <button onclick="showQRModal('${s.id}')" class="p-2 bg-blue-100 text-blue-600 rounded-lg"><i class="fas fa-qrcode"></i></button>
+                            <button onclick="editSiswa('${s.id}')" class="p-2 bg-yellow-100 text-yellow-600 rounded-lg"><i class="fas fa-edit"></i></button>
+                            <button onclick="hapusSiswa('${s.id}')" class="p-2 bg-red-100 text-red-600 rounded-lg"><i class="fas fa-trash"></i></button>
                         </div>
                     </td>
                 </tr>
-            `).join('') || '<tr><td colspan="3" class="p-8 text-center text-gray-400 text-xs italic">Belum ada data siswa.</td></tr>';
+            `).join('');
 
             renderRekapList();
         }
 
         function renderRekapList() {
             const listContainer = document.getElementById('rekap-list-content');
-            const logsToday = state.absensi.filter(a => a.tanggal === state.settings.systemDate);
-            
+            const logsToday = window.state.absensi.filter(a => a.tanggal === window.state.settings.systemDate);
             let html = "";
-            let color = "blue";
             let displayData = [];
 
-            if (state.currentRekapTab === 'masuk') {
+            if (window.state.currentRekapTab === 'masuk') {
                 displayData = logsToday.filter(a => a.tipe === 'MASUK');
-                color = "blue";
-            } else if (state.currentRekapTab === 'pulang') {
+            } else if (window.state.currentRekapTab === 'pulang') {
                 displayData = logsToday.filter(a => a.tipe === 'PULANG');
-                color = "orange";
             } else {
                 const hasAbsenNis = new Set(logsToday.filter(l => l.tipe === 'MASUK').map(l => l.nis));
-                displayData = state.siswa.filter(s => !hasAbsenNis.has(s.nis));
-                color = "red";
-                
-                // Tambahkan tombol hapus khusus di menu Tidak Hadir
-                html += `
-                    <button onclick="confirmClearRekap()" class="w-full mb-4 bg-red-100 text-red-700 py-3 rounded-xl text-xs font-bold border border-red-200 hover:bg-red-200 transition">
-                        <i class="fas fa-trash-alt mr-2"></i> HAPUS SELURUH REKAPITULASI
-                    </button>
-                `;
+                displayData = window.state.siswa.filter(s => !hasAbsenNis.has(s.nis));
+                html += `<button onclick="confirmClearRekap()" class="w-full mb-4 bg-red-50 text-red-600 py-3 rounded-xl text-xs font-bold border border-red-100">KOSONGKAN DATA CLOUD</button>`;
             }
 
             html += displayData.map(item => `
-                <div class="glass-card flex justify-between items-center p-4 border-l-4 border-${color}-500">
+                <div class="glass-card flex justify-between items-center p-4">
                     <div>
                         <p class="font-bold text-sm text-gray-800">${item.nama}</p>
                         <p class="text-[10px] text-gray-400 uppercase font-bold">
-                            ${state.currentRekapTab === 'tidak-hadir' ? item.kelas : `${item.status} • ${item.waktu}`}
+                            ${window.state.currentRekapTab === 'tidak-hadir' ? item.kelas : `${item.status} • ${item.waktu}`}
                         </p>
                     </div>
-                    <button onclick="sendWA('${item.nis}', '${state.currentRekapTab.toUpperCase()}')" class="bg-green-500 text-white p-2 rounded-full text-xs font-bold hover:bg-green-600 transition">
+                    <button onclick="sendWA('${item.nis}', '${window.state.currentRekapTab.toUpperCase()}')" class="bg-green-500 text-white p-2 rounded-full">
                         <i class="fab fa-whatsapp text-lg"></i>
                     </button>
                 </div>
-            `).join('') || `<p class="text-center text-gray-400 py-10 text-xs italic">Tidak ada data ${state.currentRekapTab.replace('-', ' ')}</p>`;
+            `).join('') || `<p class="text-center text-gray-400 py-10 text-xs italic">Tidak ada data</p>`;
 
             listContainer.innerHTML = html;
         }
 
-        // WhatsApp
-        function sendWA(nis, tipe) {
-            const siswa = state.siswa.find(s => s.nis === nis);
-            if (!siswa || !siswa.hp) return showMessage("Error", "Nomor WA Ortu tidak ada.", "error");
-
-            let template = "";
-            let log = null;
-
-            if (tipe === 'TIDAK-HADIR') {
-                template = state.settings.msgBolos;
-            } else {
-                log = state.absensi.find(a => a.nis === nis && a.tanggal === state.settings.systemDate && a.tipe === (tipe === 'MASUK' ? 'MASUK' : 'PULANG'));
-                if (!log) return;
-                if (tipe === 'MASUK') template = log.status === 'Terlambat' ? state.settings.msgTelat : state.settings.msgTepat;
-                else template = state.settings.msgPulang;
-            }
-
-            const pesan = template
-                .replace('[nama]', siswa.nama)
-                .replace('[kelas]', siswa.kelas)
-                .replace('[waktu]', log ? log.waktu : '--:--')
-                .replace('[tanggal]', state.settings.systemDate)
-                .replace('[status]', log ? log.status : 'Tidak Hadir');
-
-            window.open(`https://api.whatsapp.com/send?phone=${siswa.hp}&text=${encodeURIComponent(pesan)}`, '_blank');
+        async function handleClearRekap() {
+            await window.clearRekapCloud();
+            closeConfirmModal();
+            showMessage("Sukses", "Data rekapitulasi di Cloud telah dikosongkan.", "success");
         }
 
-        // Excel
-        function exportToExcel() {
-            if (state.absensi.length === 0) return showMessage("Info", "Data masih kosong.", "info");
-            const ws = XLSX.utils.json_to_sheet(state.absensi);
-            const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "Rekap_Absensi");
-            XLSX.writeFile(wb, `SMAN1_Rekap_${state.settings.systemDate}.xlsx`);
-        }
+        function confirmClearRekap() { document.getElementById('modal-confirm').classList.remove('hidden'); }
+        function closeConfirmModal() { document.getElementById('modal-confirm').classList.add('hidden'); }
 
-        function importFromExcel(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                const data = XLSX.read(e.target.result, { type: 'binary' });
-                const json = XLSX.utils.sheet_to_json(data.Sheets[data.SheetNames[0]]);
-                json.forEach(row => {
-                    const s = {
-                        nama: row.Nama || row.nama || "",
-                        kelas: row.Kelas || row.kelas || "",
-                        nis: String(row.NIS || row.nis || ""),
-                        hp: String(row.HP || row.hp || "")
-                    };
-                    if (s.nama && s.nis) state.siswa.push(s);
-                });
-                saveState(); showMessage("Sukses", "Data diimpor.", "success");
-            };
-            reader.readAsBinaryString(file);
+        function showQRModal(id) {
+            const s = window.state.siswa.find(x => x.id === id);
+            document.getElementById('qr-modal-name').innerText = s.nama;
+            const container = document.getElementById('qrcode-container');
+            container.innerHTML = "";
+            new QRCode(container, { text: s.nis, width: 180, height: 180 });
+            document.getElementById('modal-qr').classList.remove('hidden');
         }
+        function closeQRModal() { document.getElementById('modal-qr').classList.add('hidden'); }
 
-        function downloadSampleExcel() {
-            const sample = [{ Nama: "Siswa Contoh", Kelas: "X IPA 1", NIS: "123456", HP: "628xxx" }];
-            const ws = XLSX.utils.json_to_sheet(sample);
-            const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "Contoh");
-            XLSX.writeFile(wb, "Format_Impor_Siswa.xlsx");
-        }
-
-        function closeModal() { document.getElementById('modal-notif').classList.add('hidden'); }
         function showMessage(t, d, type) {
             const icon = document.getElementById('modal-icon');
-            icon.className = `w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl ${type === 'success' ? 'bg-green-100 text-green-600' : (type === 'error' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600')}`;
-            icon.innerHTML = `<i class="fas ${type === 'success' ? 'fa-check' : (type === 'error' ? 'fa-times' : 'fa-info')}"></i>`;
+            icon.className = `w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl ${type === 'success' ? 'bg-green-100 text-green-600' : 'bg-blue-100 text-blue-600'}`;
+            icon.innerHTML = `<i class="fas ${type === 'success' ? 'fa-check' : 'fa-info'}"></i>`;
             document.getElementById('modal-title').innerText = t;
             document.getElementById('modal-desc').innerText = d;
             document.getElementById('modal-notif').classList.remove('hidden');
         }
+        function closeModal() { document.getElementById('modal-notif').classList.add('hidden'); }
 
-        window.onload = () => { renderAll(); updateClock(); };
+        function sendWA(nis, tipe) {
+            const siswa = window.state.siswa.find(s => s.nis === nis);
+            if (!siswa || !siswa.hp) return;
+            const log = window.state.absensi.find(a => a.nis === nis && a.tanggal === window.state.settings.systemDate);
+            const pesan = `Pemberitahuan Absensi ${tipe} untuk ${siswa.nama} (${siswa.kelas}).`;
+            window.open(`https://api.whatsapp.com/send?phone=${siswa.hp}&text=${encodeURIComponent(pesan)}`, '_blank');
+        }
     </script>
 </body>
 </html>
