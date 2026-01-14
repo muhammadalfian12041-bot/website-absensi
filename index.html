@@ -12,7 +12,7 @@
     
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, setDoc, getDoc, collection, onSnapshot, addDoc, updateDoc, deleteDoc, query, writeBatch } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // Konfigurasi Firebase dari Environment
@@ -39,7 +39,11 @@
         // --- AUTHENTICATION (Rule 3: Auth Before Queries) ---
         async function initAuth() {
             try {
-                await signInAnonymously(auth);
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
                 console.log("Auth berhasil");
             } catch (error) {
                 console.error("Auth error:", error);
@@ -59,8 +63,11 @@
         function startRealtimeListeners() {
             if (!window.state.user) return;
 
+            // Perbaikan Path: Menggunakan doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'config') agar genap (6 segmen)
+            const settingsDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'config');
+
             // 1. Sinkronisasi Pengaturan (Jam & Tanggal)
-            onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'settings'), (snapshot) => {
+            onSnapshot(settingsDocRef, (snapshot) => {
                 if (snapshot.exists()) {
                     window.state.settings = snapshot.data();
                     if (window.state.currentTab === 'settings') loadSettingsToUI();
@@ -68,18 +75,20 @@
                     renderAll();
                 } else {
                     // Inisialisasi awal jika data belum ada di cloud
-                    setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings'), window.state.settings);
+                    setDoc(settingsDocRef, window.state.settings);
                 }
             }, (err) => console.error("Sync Settings Error:", err));
 
             // 2. Sinkronisasi Database Siswa
-            onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'siswa'), (snapshot) => {
+            const siswaColRef = collection(db, 'artifacts', appId, 'public', 'data', 'siswa');
+            onSnapshot(siswaColRef, (snapshot) => {
                 window.state.siswa = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 renderAll();
             }, (err) => console.error("Sync Siswa Error:", err));
 
             // 3. Sinkronisasi Log Absensi
-            onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'absensi'), (snapshot) => {
+            const absensiColRef = collection(db, 'artifacts', appId, 'public', 'data', 'absensi');
+            onSnapshot(absensiColRef, (snapshot) => {
                 window.state.absensi = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
                     .sort((a, b) => b.timestamp - a.timestamp);
                 renderAll();
@@ -91,8 +100,9 @@
             if (!window.state.user) return;
             const editId = document.getElementById('edit-index').value;
             try {
+                const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'siswa');
                 if (editId === "-1") {
-                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'siswa'), data);
+                    await addDoc(colRef, data);
                 } else {
                     await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'siswa', editId), data);
                 }
@@ -113,7 +123,8 @@
 
         window.cloudUpdateSettings = async (data) => {
             if (!window.state.user) return;
-            await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings'), data);
+            // Gunakan path yang konsisten (6 segmen)
+            await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'config'), data);
         };
 
         window.cloudClearAbsensi = async () => {
@@ -340,7 +351,11 @@
 
         // Tab Navigation
         async function switchTab(tabId) {
-            if (window.state.currentTab === 'scan') await qrScanner.stop().catch(()=>{});
+            if (window.state.currentTab === 'scan') {
+                try {
+                    await qrScanner.stop();
+                } catch(e) {}
+            }
             
             document.querySelectorAll('main > section').forEach(s => s.classList.add('hidden'));
             document.querySelectorAll('nav button').forEach(b => b.classList.remove('nav-active', 'text-blue-600'));
@@ -378,7 +393,12 @@
                 });
 
                 document.getElementById('scan-notif').classList.remove('hidden');
-                setTimeout(() => document.getElementById('scan-notif').classList.add('hidden'), 2000);
+                setTimeout(() => {
+                    const el = document.getElementById('scan-notif');
+                    if (el) el.classList.add('hidden');
+                }, 2000);
+            }).catch(err => {
+                console.error("Scanner error:", err);
             });
         }
 
@@ -439,34 +459,38 @@
 
             // Log Terbaru
             const logContainer = document.getElementById('log-terbaru');
-            logContainer.innerHTML = todayLogs.slice(0, 10).map(l => `
-                <div class="p-4 flex justify-between items-center bg-white">
-                    <div>
-                        <div class="text-sm font-bold">${l.nama}</div>
-                        <div class="text-[10px] text-gray-400 font-bold uppercase">${l.tipe} • ${l.status}</div>
+            if (logContainer) {
+                logContainer.innerHTML = todayLogs.slice(0, 10).map(l => `
+                    <div class="p-4 flex justify-between items-center bg-white">
+                        <div>
+                            <div class="text-sm font-bold">${l.nama}</div>
+                            <div class="text-[10px] text-gray-400 font-bold uppercase">${l.tipe} • ${l.status}</div>
+                        </div>
+                        <div class="text-right">
+                            <div class="text-xs font-black text-blue-600">${l.waktu}</div>
+                            <div class="text-[9px] text-gray-300 font-mono">${l.nis}</div>
+                        </div>
                     </div>
-                    <div class="text-right">
-                        <div class="text-xs font-black text-blue-600">${l.waktu}</div>
-                        <div class="text-[9px] text-gray-300 font-mono">${l.nis}</div>
-                    </div>
-                </div>
-            `).join('') || '<div class="p-10 text-center text-gray-300 text-xs italic">Belum ada aktivitas hari ini</div>';
+                `).join('') || '<div class="p-10 text-center text-gray-300 text-xs italic">Belum ada aktivitas hari ini</div>';
+            }
 
             // List Siswa
             const siswaContainer = document.getElementById('list-siswa');
-            siswaContainer.innerHTML = window.state.siswa.map(s => `
-                <div class="p-4 flex justify-between items-center bg-white">
-                    <div>
-                        <div class="text-sm font-bold text-gray-800">${s.nama}</div>
-                        <div class="text-[10px] font-bold text-blue-500 uppercase">${s.kelas}</div>
+            if (siswaContainer) {
+                siswaContainer.innerHTML = window.state.siswa.map(s => `
+                    <div class="p-4 flex justify-between items-center bg-white">
+                        <div>
+                            <div class="text-sm font-bold text-gray-800">${s.nama}</div>
+                            <div class="text-[10px] font-bold text-blue-500 uppercase">${s.kelas}</div>
+                        </div>
+                        <div class="flex gap-2">
+                            <button onclick="showQR('${s.id}')" class="w-9 h-9 bg-gray-50 text-gray-400 rounded-xl hover:bg-blue-50 hover:text-blue-600 transition-colors"><i class="fas fa-qrcode"></i></button>
+                            <button onclick="editSiswa('${s.id}')" class="w-9 h-9 bg-gray-50 text-gray-400 rounded-xl hover:bg-yellow-50 hover:text-yellow-600 transition-colors"><i class="fas fa-edit"></i></button>
+                            <button onclick="window.cloudDeleteSiswa('${s.id}')" class="w-9 h-9 bg-gray-50 text-gray-400 rounded-xl hover:bg-red-50 hover:text-red-600 transition-colors"><i class="fas fa-trash"></i></button>
+                        </div>
                     </div>
-                    <div class="flex gap-2">
-                        <button onclick="showQR('${s.id}')" class="w-9 h-9 bg-gray-50 text-gray-400 rounded-xl hover:bg-blue-50 hover:text-blue-600 transition-colors"><i class="fas fa-qrcode"></i></button>
-                        <button onclick="editSiswa('${s.id}')" class="w-9 h-9 bg-gray-50 text-gray-400 rounded-xl hover:bg-yellow-50 hover:text-yellow-600 transition-colors"><i class="fas fa-edit"></i></button>
-                        <button onclick="window.cloudDeleteSiswa('${s.id}')" class="w-9 h-9 bg-gray-50 text-gray-400 rounded-xl hover:bg-red-50 hover:text-red-600 transition-colors"><i class="fas fa-trash"></i></button>
-                    </div>
-                </div>
-            `).join('');
+                `).join('');
+            }
 
             renderRekapList();
         }
@@ -482,6 +506,7 @@
 
         function renderRekapList() {
             const container = document.getElementById('rekap-container');
+            if (!container) return;
             const logs = window.state.absensi.filter(a => a.tanggal === window.state.settings.systemDate);
             let display = [];
 
@@ -509,6 +534,7 @@
         function showNotification(title, body, type) {
             const modal = document.getElementById('notif-modal');
             const icon = document.getElementById('notif-icon');
+            if (!modal || !icon) return;
             icon.className = `w-16 h-16 rounded-2xl flex items-center justify-center text-3xl mx-auto mb-4 ${type === 'success' ? 'bg-green-100 text-green-600' : 'bg-blue-100 text-blue-600'}`;
             icon.innerHTML = `<i class="fas ${type === 'success' ? 'fa-check-circle' : 'fa-info-circle'}"></i>`;
             document.getElementById('notif-title').innerText = title;
@@ -520,6 +546,7 @@
         // QR Utils
         function showQR(id) {
             const s = window.state.siswa.find(x => x.id === id);
+            if (!s) return;
             document.getElementById('qr-name').innerText = s.nama;
             const target = document.getElementById('qr-target');
             target.innerHTML = "";
@@ -528,7 +555,7 @@
         }
         function closeQR() { document.getElementById('qr-modal').classList.add('hidden'); }
 
-        function kirimWA(nis) {
+        window.kirimWA = function(nis) {
             const s = window.state.siswa.find(x => x.nis === nis);
             if (!s || !s.wa) return showNotification("Gagal", "Nomor WA orang tua tidak ditemukan.", "info");
             const log = window.state.absensi.find(a => a.nis === nis && a.tanggal === window.state.settings.systemDate);
@@ -541,7 +568,7 @@
             }
             
             window.open(`https://wa.me/${s.wa}?text=${encodeURIComponent(msg)}`, '_blank');
-        }
+        };
 
         async function clearCloudData() {
             if (confirm("Apakah Anda yakin ingin menghapus SEMUA data absensi hari ini di cloud? Perubahan ini akan terasa di semua perangkat.")) {
@@ -549,7 +576,7 @@
             }
         }
         
-        function exportExcel() {
+        window.exportExcel = function() {
             const data = window.state.absensi.map(a => ({
                 Tanggal: a.tanggal,
                 Waktu: a.waktu,
@@ -563,9 +590,9 @@
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, "Rekap Absensi");
             XLSX.writeFile(wb, `Absensi_SMAN1MOTUI_${window.state.settings.systemDate}.xlsx`);
-        }
+        };
         
-        function importSiswa(e) {
+        window.importSiswa = function(e) {
             const file = e.target.files[0];
             const reader = new FileReader();
             reader.onload = async (event) => {
@@ -587,7 +614,7 @@
                 showNotification("Selesai", "Data berhasil diimpor ke cloud.", "success");
             };
             reader.readAsBinaryString(file);
-        }
+        };
     </script>
 </body>
 </html>
